@@ -1,0 +1,26 @@
+{
+  "name": "volxo-whatsapp-connection-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "server.js",
+  "engines": {
+    "node": ">=20 <21"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "render-build": "echo 'no build'"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "@supabase/supabase-js": "^2.45.4",
+    "pino": "^9.4.0",
+    "pino-pretty": "^11.2.2",
+    "qrcode": "^1.5.3",
+    "uuid": "^9.0.1",
+    "ws": "^8.18.0",
+    "@whiskeysockets/baileys": "^6.7.9",
+    "node-fetch": "^3.3.2"
+  }
+}
