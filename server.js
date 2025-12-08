@@ -413,16 +413,33 @@ async function startWhatsAppSession(instanceId) {
     const authDir = `${PUPPETEER_CACHE_DIR}/auth_${instanceId}`;
     console.log(`[WA] Diretório de autenticação: ${authDir}`);
     
+    // Limpa pasta de autenticação antiga (pode estar corrompida)
+    try {
+      const fs = await import('fs/promises');
+      await fs.rm(authDir, { recursive: true, force: true });
+      console.log(`[WA] Pasta de autenticação antiga removida`);
+    } catch (err) {
+      console.log(`[WA] Nenhuma pasta antiga para remover (primeira conexão)`);
+    }
+    
     const { state, saveCreds } = await useMultiFileAuthState(authDir);
-    console.log(`[WA] Estado de autenticação carregado`);
+    console.log(`[WA] Estado de autenticação carregado (limpo)`);
 
     const sock = makeWASocket({
       auth: state,
-      connectTimeoutMs: 60000, // 60 segundos de timeout
+      connectTimeoutMs: 60000,
       defaultQueryTimeoutMs: 60000,
       keepAliveIntervalMs: 30000,
       retryRequestDelayMs: 5000,
-      maxMsgRetryCount: 3
+      maxMsgRetryCount: 3,
+      // Configurações adicionais para melhor compatibilidade
+      syncFullHistory: false,
+      markOnlineOnConnect: false,
+      fireInitQueries: false,
+      generateHighQualityLinkPreview: false,
+      patchMessageBeforeSending: (message) => {
+        return message;
+      }
     });
     console.log(`[WA] Socket WhatsApp criado`);
 
@@ -431,11 +448,26 @@ async function startWhatsAppSession(instanceId) {
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('connection.update', async (update) => {
-      const { connection, lastDisconnect, qr } = update;
-      console.log(`[WA] Update de conexão para ${instanceId}:`, { connection, hasQr: !!qr });
+      const { connection, lastDisconnect, qr, isNewLogin, isOnline, receivedPendingNotifications } = update;
+      
+      console.log(`[WA] === UPDATE DE CONEXÃO ===`);
+      console.log(`[WA] Instância: ${instanceId}`);
+      console.log(`[WA] Status: ${connection || 'N/A'}`);
+      console.log(`[WA] Tem QR: ${!!qr}`);
+      console.log(`[WA] Novo Login: ${isNewLogin || 'N/A'}`);
+      console.log(`[WA] Online: ${isOnline || 'N/A'}`);
+      console.log(`[WA] Pending Notif: ${receivedPendingNotifications || 'N/A'}`);
+      
+      if (lastDisconnect) {
+        console.log(`[WA] Última desconexão:`, {
+          statusCode: lastDisconnect?.error?.output?.statusCode,
+          message: lastDisconnect?.error?.message
+        });
+      }
 
       if (qr) {
-        console.log(`[WA] QR Code gerado para ${instanceId}`);
+        console.log(`[WA] ✅ QR CODE GERADO!`);
+        console.log(`[WA] QR Code length: ${qr.length}`);
         console.log(`[WA] QR Code (primeiros 50 chars): ${qr.substring(0, 50)}...`);
         // Envia QR code para todos os clientes conectados
         broadcastToInstance(instanceId, { type: 'qr', data: qr });
