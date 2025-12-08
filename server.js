@@ -175,7 +175,7 @@ app.get('/api/instances', async (req, res) => {
     const { data, error } = await supabase
       .from('installations')
       .select('*')
-      .order('id', { ascending: false });
+      .order('instanceId', { ascending: false });
 
     if (error) {
       console.error('[LIST] Erro do Supabase:', error);
