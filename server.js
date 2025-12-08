@@ -399,13 +399,25 @@ app.delete('/api/instances/:id', async (req, res) => {
 // 🔹 Função para iniciar sessão do WhatsApp
 async function startWhatsAppSession(instanceId) {
   try {
+    console.log(`[WA] Iniciando sessão WhatsApp para instância: ${instanceId}`);
     const authDir = `${PUPPETEER_CACHE_DIR}/auth_${instanceId}`;
+    console.log(`[WA] Diretório de autenticação: ${authDir}`);
+    
     const { state, saveCreds } = await useMultiFileAuthState(authDir);
+    console.log(`[WA] Estado de autenticação carregado`);
 
     const sock = makeWASocket({
       auth: state,
-      printQRInTerminal: false,
+      printQRInTerminal: true, // Ativa QR no terminal para debug
+      connectTimeoutMs: 60000, // 60 segundos de timeout
+      defaultQueryTimeoutMs: 60000,
+      keepAliveIntervalMs: 30000,
+      logger: {
+        level: 'info',
+        log: (level, msg) => console.log(`[Baileys ${level}]`, msg)
+      }
     });
+    console.log(`[WA] Socket WhatsApp criado`);
 
     activeSessions.set(instanceId, { sock, clients: new Set() });
 
@@ -413,10 +425,14 @@ async function startWhatsAppSession(instanceId) {
 
     sock.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update;
+      console.log(`[WA] Update de conexão para ${instanceId}:`, { connection, hasQr: !!qr });
 
       if (qr) {
+        console.log(`[WA] QR Code gerado para ${instanceId}`);
+        console.log(`[WA] QR Code (primeiros 50 chars): ${qr.substring(0, 50)}...`);
         // Envia QR code para todos os clientes conectados
         broadcastToInstance(instanceId, { type: 'qr', data: qr });
+        console.log(`[WA] QR Code enviado via WebSocket para ${instanceId}`);
       }
 
       if (connection === 'close') {
