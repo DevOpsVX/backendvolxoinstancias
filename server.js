@@ -49,6 +49,65 @@ const activeSessions = new Map();
 // ✅ Rota de teste
 app.get('/', (req, res) => res.send('API listening'));
 
+// 🔍 Rota de teste de conexão com Supabase
+app.get('/api/test-supabase', async (req, res) => {
+  try {
+    console.log('[TEST] Testando conexão com Supabase...');
+    console.log('[TEST] SUPABASE_URL:', SUPABASE_URL ? 'Configurada' : 'NÃO configurada');
+    console.log('[TEST] SUPABASE_KEY:', SUPABASE_KEY ? 'Configurada (primeiros 10 chars: ' + SUPABASE_KEY.substring(0, 10) + '...)' : 'NÃO configurada');
+    
+    // Tenta fazer uma query simples
+    const { data, error, count } = await supabase
+      .from('installations')
+      .select('*', { count: 'exact', head: false })
+      .limit(1);
+    
+    if (error) {
+      console.error('[TEST] Erro ao conectar:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao conectar com Supabase',
+        error: {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        },
+        config: {
+          hasUrl: !!SUPABASE_URL,
+          hasKey: !!SUPABASE_KEY,
+          urlPreview: SUPABASE_URL ? SUPABASE_URL.substring(0, 30) + '...' : 'N/A'
+        }
+      });
+    }
+    
+    console.log('[TEST] Conexão bem-sucedida!');
+    console.log('[TEST] Registros encontrados:', count);
+    
+    res.json({
+      success: true,
+      message: 'Conexão com Supabase OK',
+      data: {
+        recordCount: count,
+        sampleRecord: data?.[0] || null
+      },
+      config: {
+        hasUrl: true,
+        hasKey: true,
+        urlPreview: SUPABASE_URL.substring(0, 30) + '...'
+      }
+    });
+  } catch (err) {
+    console.error('[TEST] Exceção:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Exceção ao testar Supabase',
+      error: err.message,
+      stack: err.stack
+    });
+  }
+});
+
 // 🧭 Função que gera a URL de autenticação no GHL
 function buildGhlAuthUrl(instanceId) {
   const params = new URLSearchParams({
