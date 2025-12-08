@@ -3,6 +3,10 @@ import cors from 'cors';
 import fetch from 'node-fetch';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
+import { WebSocketServer } from 'ws';
+import makeWASocket, { DisconnectReason, useMultiFileAuthState } from '@whiskeysockets/baileys';
+import { Boom } from '@hapi/boom';
+import { nanoid } from 'nanoid';
 
 dotenv.config();
 const app = express();
@@ -25,6 +29,12 @@ const GHL_AUTH_URL =
 const GHL_SCOPES =
   process.env.GHL_SCOPES ||
   'conversations.readonly conversations.write conversations/message.readonly conversations/message.write conversations/reports.readonly contacts.readonly contacts.write oauth.write oauth.readonly conversation-ai.readonly conversation-ai.write locations.write locations.readonly custom-menu-link.readonly custom-menu-link.write marketplace-installer-details.readonly numberpools.read phonenumbers.read';
+
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const PUPPETEER_CACHE_DIR = process.env.PUPPETEER_CACHE_DIR || '/opt/render/.cache/puppeteer';
+
+// Armazenamento de sessões ativas do WhatsApp
+const activeSessions = new Map();
 
 // ✅ Rota de teste
 app.get('/', (req, res) => res.send('API listening'));
@@ -51,16 +61,17 @@ app.post('/api/instances', async (req, res) => {
     const { name } = req.body;
     if (!name) return res.status(400).json({ error: 'Nome é obrigatório' });
 
+    const instanceId = nanoid();
     const { data, error } = await supabase
       .from('installations')
-      .insert([{ instanceId: name }])
+      .insert([{ instanceId, instance_name: name }])
       .select('*')
       .single();
 
     if (error) throw error;
 
     const authUrl = buildGhlAuthUrl(data.instanceId);
-    res.json({ redirectUrl: authUrl });
+    res.json({ authUrl, instanceId: data.instanceId });
   } catch (err) {
     console.error('Erro ao criar instância:', err);
     res.status(500).json({ error: 'Erro ao criar instância' });
@@ -76,7 +87,7 @@ app.get('/api/instances', async (req, res) => {
       .order('updated_at', { ascending: false });
 
     if (error) throw error;
-    res.json(data); // envia direto o array (não um objeto)
+    res.json({ data }); // envia como objeto com propriedade data
   } catch (err) {
     console.error('Erro ao listar instâncias:', err);
     res.status(500).json({ error: 'Erro ao listar instâncias' });
@@ -110,13 +121,285 @@ app.get('/leadconnectorhq/oauth/callback', async (req, res) => {
     })
     .eq('instanceId', state);
 
-    res.send('Autenticação concluída com sucesso!');
+    // Redireciona de volta ao frontend com o instanceId
+    res.redirect(`${FRONTEND_URL}/instance/${state}`);
   } catch (err) {
     console.error('Erro no callback do GHL:', err);
     res.status(500).send('Erro ao processar callback do GHL');
   }
 });
 
+// 🔹 Rota para obter detalhes de uma instância específica
+app.get('/api/instances/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { data, error } = await supabase
+      .from('installations')
+      .select('*')
+      .eq('instanceId', id)
+      .single();
+
+    if (error) throw error;
+    
+    // Adiciona informações de sessão ativa
+    const sessionInfo = activeSessions.has(id) ? {
+      isActive: true,
+      hasSocket: !!activeSessions.get(id).sock,
+      connectedClients: activeSessions.get(id).clients.size
+    } : {
+      isActive: false,
+      hasSocket: false,
+      connectedClients: 0
+    };
+
+    res.json({ ...data, sessionInfo });
+  } catch (err) {
+    console.error('Erro ao buscar instância:', err);
+    res.status(500).json({ error: 'Erro ao buscar instância' });
+  }
+});
+
+// 🔹 Rota para atualizar nome da instância
+app.patch('/api/instances/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { instance_name } = req.body;
+
+    if (!instance_name) {
+      return res.status(400).json({ error: 'Nome é obrigatório' });
+    }
+
+    const { data, error } = await supabase
+      .from('installations')
+      .update({ instance_name })
+      .eq('instanceId', id)
+      .select('*')
+      .single();
+
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    console.error('Erro ao atualizar instância:', err);
+    res.status(500).json({ error: 'Erro ao atualizar instância' });
+  }
+});
+
+// 🔹 Rota para desconectar WhatsApp (logout)
+app.post('/api/instances/:id/disconnect', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    if (activeSessions.has(id)) {
+      const session = activeSessions.get(id);
+      if (session.sock) {
+        await session.sock.logout();
+      }
+      activeSessions.delete(id);
+    }
+
+    // Limpa o número de telefone no banco
+    await supabase
+      .from('installations')
+      .update({ phone_number: null })
+      .eq('instanceId', id);
+
+    res.json({ success: true, message: 'WhatsApp desconectado com sucesso' });
+  } catch (err) {
+    console.error('Erro ao desconectar WhatsApp:', err);
+    res.status(500).json({ error: 'Erro ao desconectar WhatsApp' });
+  }
+});
+
+// 🔹 Rota para reconectar WhatsApp (gera novo QR)
+app.post('/api/instances/:id/reconnect', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Fecha sessão existente se houver
+    if (activeSessions.has(id)) {
+      const session = activeSessions.get(id);
+      if (session.sock) {
+        await session.sock.logout();
+      }
+      activeSessions.delete(id);
+    }
+
+    // Limpa o número de telefone no banco
+    await supabase
+      .from('installations')
+      .update({ phone_number: null })
+      .eq('instanceId', id);
+
+    res.json({ success: true, message: 'Reconexão iniciada. Acesse a página da instância para escanear o novo QR code.' });
+  } catch (err) {
+    console.error('Erro ao reconectar WhatsApp:', err);
+    res.status(500).json({ error: 'Erro ao reconectar WhatsApp' });
+  }
+});
+
+// 🔹 Rota para obter estatísticas gerais
+app.get('/api/stats', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('installations')
+      .select('*');
+
+    if (error) throw error;
+
+    const stats = {
+      total: data.length,
+      connected: data.filter(i => i.phone_number).length,
+      pending: data.filter(i => !i.phone_number).length,
+      activeSessions: activeSessions.size,
+      instances: data.map(i => ({
+        instanceId: i.instanceId,
+        instance_name: i.instance_name,
+        phone_number: i.phone_number,
+        company_id: i.company_id,
+        hasActiveSession: activeSessions.has(i.instanceId)
+      }))
+    };
+
+    res.json(stats);
+  } catch (err) {
+    console.error('Erro ao buscar estatísticas:', err);
+    res.status(500).json({ error: 'Erro ao buscar estatísticas' });
+  }
+});
+
+// 🔹 Rota para deletar instância
+app.delete('/api/instances/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Fecha a sessão do WhatsApp se estiver ativa
+    if (activeSessions.has(id)) {
+      const session = activeSessions.get(id);
+      if (session.sock) {
+        await session.sock.logout();
+      }
+      activeSessions.delete(id);
+    }
+
+    const { error } = await supabase
+      .from('installations')
+      .delete()
+      .eq('instanceId', id);
+
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Erro ao deletar instância:', err);
+    res.status(500).json({ error: 'Erro ao deletar instância' });
+  }
+});
+
+// 🔹 Função para iniciar sessão do WhatsApp
+async function startWhatsAppSession(instanceId, wss) {
+  try {
+    const authDir = `${PUPPETEER_CACHE_DIR}/auth_${instanceId}`;
+    const { state, saveCreds } = await useMultiFileAuthState(authDir);
+
+    const sock = makeWASocket({
+      auth: state,
+      printQRInTerminal: false,
+    });
+
+    activeSessions.set(instanceId, { sock, clients: new Set() });
+
+    sock.ev.on('creds.update', saveCreds);
+
+    sock.ev.on('connection.update', async (update) => {
+      const { connection, lastDisconnect, qr } = update;
+
+      if (qr) {
+        // Envia QR code para todos os clientes conectados
+        broadcastToInstance(instanceId, { type: 'qr', data: qr });
+      }
+
+      if (connection === 'close') {
+        const shouldReconnect =
+          (lastDisconnect?.error as Boom)?.output?.statusCode !==
+          DisconnectReason.loggedOut;
+        
+        if (shouldReconnect) {
+          startWhatsAppSession(instanceId, wss);
+        } else {
+          activeSessions.delete(instanceId);
+        }
+      } else if (connection === 'open') {
+        const phoneNumber = sock.user?.id?.split(':')[0];
+        
+        // Atualiza no banco de dados
+        await supabase
+          .from('installations')
+          .update({ phone_number: phoneNumber })
+          .eq('instanceId', instanceId);
+
+        // Notifica clientes
+        broadcastToInstance(instanceId, { type: 'status', data: 'connected' });
+      }
+    });
+
+    return sock;
+  } catch (err) {
+    console.error(`Erro ao iniciar sessão WhatsApp para ${instanceId}:`, err);
+    throw err;
+  }
+}
+
+// 🔹 Função para enviar mensagem para todos os clientes de uma instância
+function broadcastToInstance(instanceId, message) {
+  const session = activeSessions.get(instanceId);
+  if (session && session.clients) {
+    const msgString = JSON.stringify(message);
+    session.clients.forEach((client) => {
+      if (client.readyState === 1) {
+        client.send(msgString);
+      }
+    });
+  }
+}
+
 // 🔹 Inicialização do servidor
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`✅ API listening on port ${PORT}`));
+const server = app.listen(PORT, () => console.log(`✅ API listening on port ${PORT}`));
+
+// 🔹 Configuração do WebSocket
+const wss = new WebSocketServer({ server });
+
+wss.on('connection', (ws, req) => {
+  const urlParts = req.url.split('/');
+  const instanceId = urlParts[urlParts.length - 1];
+
+  console.log(`WebSocket conectado para instância: ${instanceId}`);
+
+  // Adiciona cliente à lista da instância
+  if (!activeSessions.has(instanceId)) {
+    activeSessions.set(instanceId, { sock: null, clients: new Set() });
+    // Inicia sessão do WhatsApp
+    startWhatsAppSession(instanceId, wss).catch(console.error);
+  }
+  
+  const session = activeSessions.get(instanceId);
+  session.clients.add(ws);
+
+  ws.on('close', () => {
+    console.log(`WebSocket desconectado para instância: ${instanceId}`);
+    session.clients.delete(ws);
+    
+    // Se não há mais clientes, pode considerar fechar a sessão
+    if (session.clients.size === 0 && !session.sock?.user) {
+      // Mantém a sessão por 5 minutos antes de limpar
+      setTimeout(() => {
+        if (session.clients.size === 0) {
+          activeSessions.delete(instanceId);
+        }
+      }, 5 * 60 * 1000);
+    }
+  });
+
+  ws.on('error', (err) => {
+    console.error(`Erro no WebSocket para ${instanceId}:`, err);
+  });
+});
