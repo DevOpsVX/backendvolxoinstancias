@@ -46,6 +46,16 @@ const PUPPETEER_CACHE_DIR = process.env.PUPPETEER_CACHE_DIR || '/opt/render/.cac
 // Armazenamento de sessões ativas do WhatsApp
 const activeSessions = new Map();
 
+// 🛡️ Função para limpar sessões antigas ao iniciar
+async function cleanupOldSessions() {
+  console.log('🧹 Limpando sessões antigas...');
+  activeSessions.clear();
+  console.log('✅ Sessões antigas limpas. Servidor iniciando limpo.');
+}
+
+// Executa limpeza ao iniciar
+cleanupOldSessions();
+
 // ✅ Rota de teste
 app.get('/', (req, res) => res.send('API listening'));
 
@@ -408,10 +418,11 @@ async function startWhatsAppSession(instanceId) {
 
     const sock = makeWASocket({
       auth: state,
-      printQRInTerminal: true, // Ativa QR no terminal para debug
       connectTimeoutMs: 60000, // 60 segundos de timeout
       defaultQueryTimeoutMs: 60000,
-      keepAliveIntervalMs: 30000
+      keepAliveIntervalMs: 30000,
+      retryRequestDelayMs: 5000,
+      maxMsgRetryCount: 3
     });
     console.log(`[WA] Socket WhatsApp criado`);
 
@@ -432,15 +443,20 @@ async function startWhatsAppSession(instanceId) {
       }
 
       if (connection === 'close') {
-        const shouldReconnect =
-          lastDisconnect?.error?.output?.statusCode !==
-          DisconnectReason.loggedOut;
+        const statusCode = lastDisconnect?.error?.output?.statusCode;
+        const reason = statusCode === DisconnectReason.loggedOut ? 'logged out' : 'connection lost';
         
-        if (shouldReconnect) {
-          startWhatsAppSession(instanceId);
-        } else {
-          activeSessions.delete(instanceId);
-        }
+        console.log(`[WA] Conexão fechada para ${instanceId}: ${reason}`);
+        
+        // Remove sessão do mapa (não reconecta automaticamente)
+        activeSessions.delete(instanceId);
+        
+        // Notifica clientes que a conexão foi perdida
+        broadcastToInstance(instanceId, { 
+          type: 'status', 
+          data: 'disconnected',
+          reason: reason
+        });
       } else if (connection === 'open') {
         const phoneNumber = sock.user?.id?.split(':')[0];
         
