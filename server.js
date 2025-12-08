@@ -111,6 +111,7 @@ app.get('/api/test-supabase', async (req, res) => {
 // 🧭 Função que gera a URL de autenticação no GHL
 function buildGhlAuthUrl(instanceId) {
   const params = new URLSearchParams({
+    response_type: 'code',
     client_id: GHL_CLIENT_ID,
     redirect_uri: GHL_REDIRECT_URI,
     state: instanceId,
