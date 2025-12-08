@@ -438,9 +438,12 @@ app.delete('/api/instances/:id', async (req, res) => {
 });
 
 // 🔹 Função para iniciar sessão do WhatsApp
-async function startWhatsAppSession(instanceId) {
+async function startWhatsAppSession(instanceId, retryCount = 0) {
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY = 5000; // 5 segundos
+  
   try {
-    console.log(`[WA] Iniciando sessão WhatsApp para instância: ${instanceId}`);
+    console.log(`[WA] Iniciando sessão WhatsApp para instância: ${instanceId} (tentativa ${retryCount + 1}/${MAX_RETRIES + 1})`);
     const authDir = `${PUPPETEER_CACHE_DIR}/auth_${instanceId}`;
     console.log(`[WA] Diretório de autenticação: ${authDir}`);
     
@@ -460,20 +463,24 @@ async function startWhatsAppSession(instanceId) {
       auth: state,
       printQRInTerminal: false,
       browser: ['Volxo WhatsApp', 'Chrome', '120.0.0'],
-      // Timeouts aumentados para melhor estabilidade
-      connectTimeoutMs: 120000, // 2 minutos
-      defaultQueryTimeoutMs: 90000, // 1.5 minutos
-      keepAliveIntervalMs: 30000, // 30 segundos
-      retryRequestDelayMs: 5000, // 5 segundos
-      maxMsgRetryCount: 10, // 10 tentativas
+      // Timeouts otimizados para ambientes com rede instável
+      connectTimeoutMs: 60000, // 1 minuto (reduzido para falhar mais rápido e tentar retry)
+      defaultQueryTimeoutMs: 60000, // 1 minuto
+      keepAliveIntervalMs: 20000, // 20 segundos (mais frequente)
+      retryRequestDelayMs: 2000, // 2 segundos (mais rápido)
+      maxMsgRetryCount: 5, // 5 tentativas
       qrTimeout: 60000, // 60 segundos para QR Code
       // Configurações para melhor estabilidade
       syncFullHistory: false,
-      markOnlineOnConnect: true,
-      fireInitQueries: true,
+      markOnlineOnConnect: false, // Desabilita para evitar overhead inicial
+      fireInitQueries: false, // Desabilita para conexão mais rápida
       emitOwnEvents: false,
       generateHighQualityLinkPreview: false,
-      getMessage: async () => undefined
+      getMessage: async () => undefined,
+      // Configurações adicionais para melhor compatibilidade
+      shouldIgnoreJid: () => false,
+      shouldSyncHistoryMessage: () => false,
+      patchMessageBeforeSending: (message) => message
     });
     console.log(`[WA] Socket WhatsApp criado`);
 
@@ -495,8 +502,16 @@ async function startWhatsAppSession(instanceId) {
       if (lastDisconnect) {
         console.log(`[WA] Última desconexão:`, {
           statusCode: lastDisconnect?.error?.output?.statusCode,
-          message: lastDisconnect?.error?.message
+          message: lastDisconnect?.error?.message,
+          stack: lastDisconnect?.error?.stack?.substring(0, 200)
         });
+        
+        // Log adicional para erro 405
+        if (lastDisconnect?.error?.output?.statusCode === 405) {
+          console.log(`[WA] 🚨 ERRO 405 DETECTADO - Connection Failure`);
+          console.log(`[WA] Isso geralmente indica problema de rede/firewall`);
+          console.log(`[WA] Retry automático será acionado se disponível`);
+        }
       }
 
       if (qr) {
@@ -597,7 +612,18 @@ async function startWhatsAppSession(instanceId) {
 
     return sock;
   } catch (err) {
-    console.error(`Erro ao iniciar sessão WhatsApp para ${instanceId}:`, err);
+    console.error(`[WA] Erro ao iniciar sessão WhatsApp para ${instanceId} (tentativa ${retryCount + 1}/${MAX_RETRIES + 1}):`, err);
+    
+    // Se ainda temos tentativas, aguarda e tenta novamente
+    if (retryCount < MAX_RETRIES) {
+      console.log(`[WA] Aguardando ${RETRY_DELAY}ms antes de tentar novamente...`);
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+      console.log(`[WA] Tentando reconectar...`);
+      return startWhatsAppSession(instanceId, retryCount + 1);
+    }
+    
+    // Se esgotou as tentativas, lança o erro
+    console.error(`[WA] ❌ Todas as ${MAX_RETRIES + 1} tentativas falharam para ${instanceId}`);
     throw err;
   }
 }
