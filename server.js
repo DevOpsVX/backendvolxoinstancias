@@ -471,16 +471,7 @@ async function startWhatsAppSession(instanceId) {
       fireInitQueries: true,
       emitOwnEvents: false,
       generateHighQualityLinkPreview: false,
-      getMessage: async () => undefined,
-      logger: {
-        level: 'silent',
-        fatal: () => {},
-        error: () => {},
-        warn: () => {},
-        info: () => {},
-        debug: () => {},
-        trace: () => {}
-      }
+      getMessage: async () => undefined
     });
     console.log(`[WA] Socket WhatsApp criado`);
 
