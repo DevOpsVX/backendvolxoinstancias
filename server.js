@@ -469,9 +469,13 @@ async function startWhatsAppSession(instanceId) {
         console.log(`[WA] ✅ QR CODE GERADO!`);
         console.log(`[WA] QR Code length: ${qr.length}`);
         console.log(`[WA] QR Code (primeiros 50 chars): ${qr.substring(0, 50)}...`);
-        // Envia QR code para todos os clientes conectados
-        broadcastToInstance(instanceId, { type: 'qr', data: qr });
-        console.log(`[WA] QR Code enviado via WebSocket para ${instanceId}`);
+        
+        // Aguarda 500ms para garantir que WebSocket está pronto
+        setTimeout(() => {
+          console.log(`[WA] Enviando QR Code via WebSocket para ${instanceId}`);
+          broadcastToInstance(instanceId, { type: 'qr', data: qr });
+          console.log(`[WA] QR Code enviado com sucesso!`);
+        }, 500);
       }
 
       if (connection === 'close') {
