@@ -271,6 +271,37 @@ app.get('/api/instances/:id', async (req, res) => {
   }
 });
 
+// 🔹 Rota para buscar QR Code da instância
+app.get('/api/instances/:id/qr', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { data, error } = await supabase
+      .from('installations')
+      .select('qr_code, qr_code_updated_at')
+      .eq('instance_id', id)
+      .single();
+
+    if (error) throw error;
+    
+    // Verifica se QR Code existe e não está expirado (5 minutos)
+    if (data.qr_code && data.qr_code_updated_at) {
+      const updatedAt = new Date(data.qr_code_updated_at);
+      const now = new Date();
+      const diffMinutes = (now - updatedAt) / 1000 / 60;
+      
+      if (diffMinutes < 5) {
+        return res.json({ qr_code: data.qr_code });
+      }
+    }
+    
+    // QR Code não existe ou expirou
+    res.json({ qr_code: null });
+  } catch (err) {
+    console.error('Erro ao buscar QR Code:', err);
+    res.status(500).json({ error: 'Erro ao buscar QR Code' });
+  }
+});
+
 // 🔹 Rota para atualizar nome da instância
 app.patch('/api/instances/:id', async (req, res) => {
   try {
@@ -470,10 +501,22 @@ async function startWhatsAppSession(instanceId) {
         console.log(`[WA] QR Code length: ${qr.length}`);
         console.log(`[WA] QR Code (primeiros 50 chars): ${qr.substring(0, 50)}...`);
         
-        // Envia QR Code IMEDIATAMENTE (sem delay)
-        console.log(`[WA] Enviando QR Code via WebSocket para ${instanceId}`);
+        // Salva QR Code no Supabase para polling HTTP
+        try {
+          await supabase
+            .from('installations')
+            .update({ 
+              qr_code: qr,
+              qr_code_updated_at: new Date().toISOString()
+            })
+            .eq('instance_id', instanceId);
+          console.log(`[WA] QR Code salvo no Supabase para ${instanceId}`);
+        } catch (err) {
+          console.error(`[WA] Erro ao salvar QR Code no Supabase:`, err);
+        }
+        
+        // Também envia via WebSocket (fallback)
         broadcastToInstance(instanceId, { type: 'qr', data: qr });
-        console.log(`[WA] QR Code enviado com sucesso!`);
       }
 
       if (connection === 'close') {
@@ -495,10 +538,14 @@ async function startWhatsAppSession(instanceId) {
       } else if (connection === 'open') {
         const phoneNumber = sock.user?.id?.split(':')[0];
         
-        // Atualiza no banco de dados
+        // Atualiza no banco de dados e limpa QR Code
         await supabase
           .from('installations')
-          .update({ phone_number: phoneNumber })
+          .update({ 
+            phone_number: phoneNumber,
+            qr_code: null,
+            qr_code_updated_at: null
+          })
           .eq('instance_id', instanceId);
 
         // Notifica clientes
