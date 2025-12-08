@@ -143,7 +143,7 @@ app.post('/api/instances', async (req, res) => {
     
     const { data, error } = await supabase
       .from('installations')
-      .insert([{ instanceId, instance_name: name }])
+      .insert([{ instance_id: instanceId, instance_name: name }])
       .select('*')
       .single();
 
@@ -153,10 +153,10 @@ app.post('/api/instances', async (req, res) => {
     }
 
     console.log('[CREATE] Instância criada com sucesso:', data);
-    const authUrl = buildGhlAuthUrl(data.instanceId);
+    const authUrl = buildGhlAuthUrl(data.instance_id);
     console.log('[CREATE] AuthUrl gerada:', authUrl);
     
-    res.json({ authUrl, instanceId: data.instanceId });
+    res.json({ authUrl, instanceId: data.instance_id });
   } catch (err) {
     console.error('[CREATE] Erro ao criar instância:', err);
     console.error('[CREATE] Stack:', err.stack);
@@ -176,7 +176,7 @@ app.get('/api/instances', async (req, res) => {
     const { data, error } = await supabase
       .from('installations')
       .select('*')
-      .order('instanceId', { ascending: false });
+      .order('instance_id', { ascending: false });
 
     if (error) {
       console.error('[LIST] Erro do Supabase:', error);
@@ -221,7 +221,7 @@ app.get('/leadconnectorhq/oauth/callback', async (req, res) => {
       refresh_token: tokenData.refresh_token,
       company_id: tokenData.companyId,
     })
-    .eq('instanceId', state);
+    .eq('instance_id', state);
 
     // Redireciona de volta ao frontend com o instanceId
     res.redirect(`${FRONTEND_URL}/instance/${state}`);
@@ -238,7 +238,7 @@ app.get('/api/instances/:id', async (req, res) => {
     const { data, error } = await supabase
       .from('installations')
       .select('*')
-      .eq('instanceId', id)
+      .eq('instance_id', id)
       .single();
 
     if (error) throw error;
@@ -274,7 +274,7 @@ app.patch('/api/instances/:id', async (req, res) => {
     const { data, error } = await supabase
       .from('installations')
       .update({ instance_name })
-      .eq('instanceId', id)
+      .eq('instance_id', id)
       .select('*')
       .single();
 
@@ -303,7 +303,7 @@ app.post('/api/instances/:id/disconnect', async (req, res) => {
     await supabase
       .from('installations')
       .update({ phone_number: null })
-      .eq('instanceId', id);
+      .eq('instance_id', id);
 
     res.json({ success: true, message: 'WhatsApp desconectado com sucesso' });
   } catch (err) {
@@ -330,7 +330,7 @@ app.post('/api/instances/:id/reconnect', async (req, res) => {
     await supabase
       .from('installations')
       .update({ phone_number: null })
-      .eq('instanceId', id);
+      .eq('instance_id', id);
 
     res.json({ success: true, message: 'Reconexão iniciada. Acesse a página da instância para escanear o novo QR code.' });
   } catch (err) {
@@ -354,11 +354,11 @@ app.get('/api/stats', async (req, res) => {
       pending: data.filter(i => !i.phone_number).length,
       activeSessions: activeSessions.size,
       instances: data.map(i => ({
-        instanceId: i.instanceId,
+        instanceId: i.instance_id,
         instance_name: i.instance_name,
         phone_number: i.phone_number,
         company_id: i.company_id,
-        hasActiveSession: activeSessions.has(i.instanceId)
+        hasActiveSession: activeSessions.has(i.instance_id)
       }))
     };
 
@@ -386,7 +386,7 @@ app.delete('/api/instances/:id', async (req, res) => {
     const { error } = await supabase
       .from('installations')
       .delete()
-      .eq('instanceId', id);
+      .eq('instance_id', id);
 
     if (error) throw error;
     res.json({ success: true });
@@ -436,7 +436,7 @@ async function startWhatsAppSession(instanceId, wss) {
         await supabase
           .from('installations')
           .update({ phone_number: phoneNumber })
-          .eq('instanceId', instanceId);
+          .eq('instance_id', instanceId);
 
         // Notifica clientes
         broadcastToInstance(instanceId, { type: 'status', data: 'connected' });
