@@ -458,18 +458,28 @@ async function startWhatsAppSession(instanceId) {
 
     const sock = makeWASocket({
       auth: state,
+      printQRInTerminal: false,
+      browser: ['Volxo WhatsApp', 'Chrome', '120.0.0'],
       connectTimeoutMs: 60000,
       defaultQueryTimeoutMs: 60000,
-      keepAliveIntervalMs: 30000,
-      retryRequestDelayMs: 5000,
-      maxMsgRetryCount: 3,
-      // Configurações adicionais para melhor compatibilidade
+      keepAliveIntervalMs: 25000,
+      retryRequestDelayMs: 3000,
+      maxMsgRetryCount: 5,
+      // Configurações para melhor estabilidade
       syncFullHistory: false,
-      markOnlineOnConnect: false,
-      fireInitQueries: false,
+      markOnlineOnConnect: true,
+      fireInitQueries: true,
+      emitOwnEvents: false,
       generateHighQualityLinkPreview: false,
-      patchMessageBeforeSending: (message) => {
-        return message;
+      getMessage: async () => undefined,
+      logger: {
+        level: 'silent',
+        fatal: () => {},
+        error: () => {},
+        warn: () => {},
+        info: () => {},
+        debug: () => {},
+        trace: () => {}
       }
     });
     console.log(`[WA] Socket WhatsApp criado`);
@@ -521,19 +531,38 @@ async function startWhatsAppSession(instanceId) {
 
       if (connection === 'close') {
         const statusCode = lastDisconnect?.error?.output?.statusCode;
+        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
         const reason = statusCode === DisconnectReason.loggedOut ? 'logged out' : 'connection lost';
         
-        console.log(`[WA] Conexão fechada para ${instanceId}: ${reason}`);
+        console.log(`[WA] Conexão fechada para ${instanceId}`);
+        console.log(`[WA] Status Code: ${statusCode}`);
+        console.log(`[WA] Razão: ${reason}`);
+        console.log(`[WA] Deve reconectar: ${shouldReconnect}`);
         
-        // Remove sessão do mapa (não reconecta automaticamente)
+        // Limpa QR Code do banco quando conexão fecha
+        try {
+          await supabase
+            .from('installations')
+            .update({ 
+              qr_code: null,
+              qr_code_updated_at: null
+            })
+            .eq('instance_id', instanceId);
+          console.log(`[WA] QR Code limpo do Supabase`);
+        } catch (err) {
+          console.error(`[WA] Erro ao limpar QR Code:`, err);
+        }
+        
+        // Remove sessão do mapa
         activeSessions.delete(instanceId);
         
-        // Envia notificação de desconexão IMEDIATAMENTE
+        // Envia notificação de desconexão
         console.log(`[WA] Enviando notificação de desconexão para ${instanceId}`);
         broadcastToInstance(instanceId, { 
           type: 'status', 
           data: 'disconnected',
-          reason: reason
+          reason: reason,
+          statusCode: statusCode
         });
       } else if (connection === 'open') {
         const phoneNumber = sock.user?.id?.split(':')[0];
