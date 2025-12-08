@@ -411,11 +411,7 @@ async function startWhatsAppSession(instanceId) {
       printQRInTerminal: true, // Ativa QR no terminal para debug
       connectTimeoutMs: 60000, // 60 segundos de timeout
       defaultQueryTimeoutMs: 60000,
-      keepAliveIntervalMs: 30000,
-      logger: {
-        level: 'info',
-        log: (level, msg) => console.log(`[Baileys ${level}]`, msg)
-      }
+      keepAliveIntervalMs: 30000
     });
     console.log(`[WA] Socket WhatsApp criado`);
 
