@@ -520,15 +520,38 @@ async function startWhatsAppSession(instanceId) {
 
 // 🔹 Função para enviar mensagem para todos os clientes de uma instância
 function broadcastToInstance(instanceId, message) {
+  console.log(`[BROADCAST] Tentando enviar para instância: ${instanceId}`);
+  console.log(`[BROADCAST] Tipo de mensagem: ${message.type}`);
+  
   const session = activeSessions.get(instanceId);
-  if (session && session.clients) {
-    const msgString = JSON.stringify(message);
-    session.clients.forEach((client) => {
-      if (client.readyState === 1) {
-        client.send(msgString);
-      }
-    });
+  
+  if (!session) {
+    console.log(`[BROADCAST] ❌ Sessão não encontrada em activeSessions!`);
+    return;
   }
+  
+  if (!session.clients) {
+    console.log(`[BROADCAST] ❌ Sessão não tem array de clientes!`);
+    return;
+  }
+  
+  console.log(`[BROADCAST] Número de clientes conectados: ${session.clients.size}`);
+  
+  const msgString = JSON.stringify(message);
+  let sentCount = 0;
+  
+  session.clients.forEach((client) => {
+    console.log(`[BROADCAST] Cliente readyState: ${client.readyState}`);
+    if (client.readyState === 1) {
+      client.send(msgString);
+      sentCount++;
+      console.log(`[BROADCAST] ✅ Mensagem enviada para cliente!`);
+    } else {
+      console.log(`[BROADCAST] ❌ Cliente não está OPEN (readyState: ${client.readyState})`);
+    }
+  });
+  
+  console.log(`[BROADCAST] Total de mensagens enviadas: ${sentCount}/${session.clients.size}`);
 }
 
 // 🔹 Inicialização do servidor
