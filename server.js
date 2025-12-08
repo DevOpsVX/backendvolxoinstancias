@@ -15,13 +15,15 @@ app.use(cors());
 
 // 🔧 Variáveis de ambiente
 const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_KEY;
+// Aceita tanto SUPABASE_KEY quanto SUPABASE_ANON_KEY para compatibilidade
+const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY;
 
 // Verificação de variáveis de ambiente
 if (!SUPABASE_URL || !SUPABASE_KEY) {
   console.error('❌ ERRO: Variáveis de ambiente do Supabase não configuradas!');
   console.error('SUPABASE_URL:', SUPABASE_URL ? '✅ Configurada' : '❌ Faltando');
   console.error('SUPABASE_KEY:', SUPABASE_KEY ? '✅ Configurada' : '❌ Faltando');
+  console.error('Nota: Aceita SUPABASE_KEY ou SUPABASE_ANON_KEY');
   process.exit(1);
 }
 
