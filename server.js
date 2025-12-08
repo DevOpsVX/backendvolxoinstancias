@@ -16,6 +16,16 @@ app.use(cors());
 // 🔧 Variáveis de ambiente
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
+
+// Verificação de variáveis de ambiente
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+  console.error('❌ ERRO: Variáveis de ambiente do Supabase não configuradas!');
+  console.error('SUPABASE_URL:', SUPABASE_URL ? '✅ Configurada' : '❌ Faltando');
+  console.error('SUPABASE_KEY:', SUPABASE_KEY ? '✅ Configurada' : '❌ Faltando');
+  process.exit(1);
+}
+
+console.log('✅ Variáveis de ambiente do Supabase configuradas');
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const GHL_CLIENT_ID = process.env.GHL_CLIENT_ID;
@@ -58,39 +68,71 @@ function buildGhlAuthUrl(instanceId) {
 // 🔹 Rota para criar nova instância
 app.post('/api/instances', async (req, res) => {
   try {
+    console.log('[CREATE] Recebida requisição para criar instância');
+    console.log('[CREATE] Body:', req.body);
+    
     const { name } = req.body;
-    if (!name) return res.status(400).json({ error: 'Nome é obrigatório' });
+    if (!name) {
+      console.log('[CREATE] Erro: Nome não fornecido');
+      return res.status(400).json({ error: 'Nome é obrigatório' });
+    }
 
     const instanceId = nanoid();
+    console.log('[CREATE] InstanceId gerado:', instanceId);
+    console.log('[CREATE] Tentando inserir no Supabase...');
+    
     const { data, error } = await supabase
       .from('installations')
       .insert([{ instanceId, instance_name: name }])
       .select('*')
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('[CREATE] Erro do Supabase:', error);
+      throw error;
+    }
 
+    console.log('[CREATE] Instância criada com sucesso:', data);
     const authUrl = buildGhlAuthUrl(data.instanceId);
+    console.log('[CREATE] AuthUrl gerada:', authUrl);
+    
     res.json({ authUrl, instanceId: data.instanceId });
   } catch (err) {
-    console.error('Erro ao criar instância:', err);
-    res.status(500).json({ error: 'Erro ao criar instância' });
+    console.error('[CREATE] Erro ao criar instância:', err);
+    console.error('[CREATE] Stack:', err.stack);
+    res.status(500).json({ 
+      error: 'Erro ao criar instância',
+      details: err.message,
+      code: err.code 
+    });
   }
 });
 
 // 🔹 Rota para listar instâncias existentes
 app.get('/api/instances', async (req, res) => {
   try {
+    console.log('[LIST] Recebida requisição para listar instâncias');
+    
     const { data, error } = await supabase
       .from('installations')
       .select('*')
       .order('updated_at', { ascending: false });
 
-    if (error) throw error;
+    if (error) {
+      console.error('[LIST] Erro do Supabase:', error);
+      throw error;
+    }
+    
+    console.log('[LIST] Instâncias encontradas:', data?.length || 0);
     res.json({ data }); // envia como objeto com propriedade data
   } catch (err) {
-    console.error('Erro ao listar instâncias:', err);
-    res.status(500).json({ error: 'Erro ao listar instâncias' });
+    console.error('[LIST] Erro ao listar instâncias:', err);
+    console.error('[LIST] Stack:', err.stack);
+    res.status(500).json({ 
+      error: 'Erro ao listar instâncias',
+      details: err.message,
+      code: err.code
+    });
   }
 });
 
