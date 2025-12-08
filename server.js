@@ -460,11 +460,13 @@ async function startWhatsAppSession(instanceId) {
       auth: state,
       printQRInTerminal: false,
       browser: ['Volxo WhatsApp', 'Chrome', '120.0.0'],
-      connectTimeoutMs: 60000,
-      defaultQueryTimeoutMs: 60000,
-      keepAliveIntervalMs: 25000,
-      retryRequestDelayMs: 3000,
-      maxMsgRetryCount: 5,
+      // Timeouts aumentados para melhor estabilidade
+      connectTimeoutMs: 120000, // 2 minutos
+      defaultQueryTimeoutMs: 90000, // 1.5 minutos
+      keepAliveIntervalMs: 30000, // 30 segundos
+      retryRequestDelayMs: 5000, // 5 segundos
+      maxMsgRetryCount: 10, // 10 tentativas
+      qrTimeout: 60000, // 60 segundos para QR Code
       // Configurações para melhor estabilidade
       syncFullHistory: false,
       markOnlineOnConnect: true,
@@ -522,11 +524,30 @@ async function startWhatsAppSession(instanceId) {
 
       if (connection === 'close') {
         const statusCode = lastDisconnect?.error?.output?.statusCode;
+        const errorMessage = lastDisconnect?.error?.message || '';
         const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-        const reason = statusCode === DisconnectReason.loggedOut ? 'logged out' : 'connection lost';
+        
+        // Identifica tipo de erro
+        let reason = 'connection lost';
+        let userMessage = 'Conexão perdida. Tente novamente.';
+        
+        if (statusCode === DisconnectReason.loggedOut) {
+          reason = 'logged out';
+          userMessage = 'Sessão encerrada. Escaneie o QR Code novamente.';
+        } else if (errorMessage.includes('Stream Errored') || errorMessage.includes('restart required')) {
+          reason = 'stream error';
+          userMessage = 'Erro de conexão com WhatsApp. Tente escanear o QR Code mais rapidamente ou verifique se o número não está conectado em outro lugar.';
+        } else if (errorMessage.includes('timed out') || errorMessage.includes('timeout')) {
+          reason = 'timeout';
+          userMessage = 'Tempo esgotado. Tente novamente com conexão mais estável.';
+        } else if (statusCode === 515) {
+          reason = 'restart required';
+          userMessage = 'WhatsApp requer reinicialização. Clique em "Tentar Novamente".';
+        }
         
         console.log(`[WA] Conexão fechada para ${instanceId}`);
         console.log(`[WA] Status Code: ${statusCode}`);
+        console.log(`[WA] Error Message: ${errorMessage}`);
         console.log(`[WA] Razão: ${reason}`);
         console.log(`[WA] Deve reconectar: ${shouldReconnect}`);
         
@@ -553,7 +574,8 @@ async function startWhatsAppSession(instanceId) {
           type: 'status', 
           data: 'disconnected',
           reason: reason,
-          statusCode: statusCode
+          statusCode: statusCode,
+          message: userMessage
         });
       } else if (connection === 'open') {
         const phoneNumber = sock.user?.id?.split(':')[0];
