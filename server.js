@@ -319,7 +319,7 @@ async function startWhatsAppSession(instanceId, wss) {
 
       if (connection === 'close') {
         const shouldReconnect =
-          (lastDisconnect?.error as Boom)?.output?.statusCode !==
+          lastDisconnect?.error?.output?.statusCode !==
           DisconnectReason.loggedOut;
         
         if (shouldReconnect) {
