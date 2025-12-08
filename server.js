@@ -491,22 +491,56 @@ wss.on('connection', (ws, req) => {
   // Adiciona cliente à lista da instância
   if (!activeSessions.has(instanceId)) {
     activeSessions.set(instanceId, { sock: null, clients: new Set() });
-    // Inicia sessão do WhatsApp
-    startWhatsAppSession(instanceId).catch(console.error);
   }
   
   const session = activeSessions.get(instanceId);
   session.clients.add(ws);
+  
+  // Envia status atual da sessão
+  if (session.sock?.user) {
+    // Já conectado
+    ws.send(JSON.stringify({ type: 'status', data: 'connected' }));
+  } else if (session.sock) {
+    // Conectando
+    ws.send(JSON.stringify({ type: 'status', data: 'connecting' }));
+  } else {
+    // Não iniciado
+    ws.send(JSON.stringify({ type: 'status', data: 'disconnected' }));
+  }
+  
+  // Escuta comandos do cliente
+  ws.on('message', async (data) => {
+    try {
+      const message = JSON.parse(data.toString());
+      
+      if (message.type === 'start') {
+        console.log(`[WS] Cliente solicitou início de sessão para ${instanceId}`);
+        
+        // Verifica se já existe sessão ativa
+        if (session.sock) {
+          console.log(`[WS] Sessão já existe para ${instanceId}`);
+          ws.send(JSON.stringify({ type: 'error', data: 'Sessão já está ativa' }));
+          return;
+        }
+        
+        // Inicia nova sessão
+        await startWhatsAppSession(instanceId);
+      }
+    } catch (err) {
+      console.error(`[WS] Erro ao processar mensagem:`, err);
+    }
+  });
 
   ws.on('close', () => {
     console.log(`WebSocket desconectado para instância: ${instanceId}`);
     session.clients.delete(ws);
     
-    // Se não há mais clientes, pode considerar fechar a sessão
+    // Se não há mais clientes e não está conectado, limpa a sessão
     if (session.clients.size === 0 && !session.sock?.user) {
-      // Mantém a sessão por 5 minutos antes de limpar
+      // Mantém a sessão por 2 minutos antes de limpar
       setTimeout(() => {
-        if (session.clients.size === 0) {
+        if (session.clients.size === 0 && !session.sock?.user) {
+          console.log(`[WS] Limpando sessão inativa: ${instanceId}`);
           activeSessions.delete(instanceId);
         }
       }, 5 * 60 * 1000);
