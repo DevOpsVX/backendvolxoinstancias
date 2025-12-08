@@ -470,12 +470,12 @@ async function startWhatsAppSession(instanceId) {
         console.log(`[WA] QR Code length: ${qr.length}`);
         console.log(`[WA] QR Code (primeiros 50 chars): ${qr.substring(0, 50)}...`);
         
-        // Aguarda 500ms para garantir que WebSocket está pronto
+        // Aguarda 1 segundo para garantir que WebSocket está pronto
         setTimeout(() => {
           console.log(`[WA] Enviando QR Code via WebSocket para ${instanceId}`);
           broadcastToInstance(instanceId, { type: 'qr', data: qr });
           console.log(`[WA] QR Code enviado com sucesso!`);
-        }, 500);
+        }, 1000);
       }
 
       if (connection === 'close') {
@@ -487,12 +487,16 @@ async function startWhatsAppSession(instanceId) {
         // Remove sessão do mapa (não reconecta automaticamente)
         activeSessions.delete(instanceId);
         
-        // Notifica clientes que a conexão foi perdida
-        broadcastToInstance(instanceId, { 
-          type: 'status', 
-          data: 'disconnected',
-          reason: reason
-        });
+        // Aguarda 2 segundos antes de notificar disconnected
+        // Isso garante que o QR Code seja enviado primeiro
+        setTimeout(() => {
+          console.log(`[WA] Enviando notificação de desconexão para ${instanceId}`);
+          broadcastToInstance(instanceId, { 
+            type: 'status', 
+            data: 'disconnected',
+            reason: reason
+          });
+        }, 2000);
       } else if (connection === 'open') {
         const phoneNumber = sock.user?.id?.split(':')[0];
         
