@@ -470,12 +470,10 @@ async function startWhatsAppSession(instanceId) {
         console.log(`[WA] QR Code length: ${qr.length}`);
         console.log(`[WA] QR Code (primeiros 50 chars): ${qr.substring(0, 50)}...`);
         
-        // Aguarda 1 segundo para garantir que WebSocket está pronto
-        setTimeout(() => {
-          console.log(`[WA] Enviando QR Code via WebSocket para ${instanceId}`);
-          broadcastToInstance(instanceId, { type: 'qr', data: qr });
-          console.log(`[WA] QR Code enviado com sucesso!`);
-        }, 1000);
+        // Envia QR Code IMEDIATAMENTE (sem delay)
+        console.log(`[WA] Enviando QR Code via WebSocket para ${instanceId}`);
+        broadcastToInstance(instanceId, { type: 'qr', data: qr });
+        console.log(`[WA] QR Code enviado com sucesso!`);
       }
 
       if (connection === 'close') {
@@ -487,16 +485,13 @@ async function startWhatsAppSession(instanceId) {
         // Remove sessão do mapa (não reconecta automaticamente)
         activeSessions.delete(instanceId);
         
-        // Aguarda 2 segundos antes de notificar disconnected
-        // Isso garante que o QR Code seja enviado primeiro
-        setTimeout(() => {
-          console.log(`[WA] Enviando notificação de desconexão para ${instanceId}`);
-          broadcastToInstance(instanceId, { 
-            type: 'status', 
-            data: 'disconnected',
-            reason: reason
-          });
-        }, 2000);
+        // Envia notificação de desconexão IMEDIATAMENTE
+        console.log(`[WA] Enviando notificação de desconexão para ${instanceId}`);
+        broadcastToInstance(instanceId, { 
+          type: 'status', 
+          data: 'disconnected',
+          reason: reason
+        });
       } else if (connection === 'open') {
         const phoneNumber = sock.user?.id?.split(':')[0];
         
@@ -575,6 +570,22 @@ wss.on('connection', (ws, req) => {
   const session = activeSessions.get(instanceId);
   session.clients.add(ws);
   
+  // Configura ping/pong para manter conexão viva
+  ws.isAlive = true;
+  ws.on('pong', () => {
+    ws.isAlive = true;
+  });
+  
+  // Envia ping a cada 30 segundos
+  const pingInterval = setInterval(() => {
+    if (ws.isAlive === false) {
+      console.log(`[WS] Cliente não respondeu ao ping, encerrando conexão: ${instanceId}`);
+      return ws.terminate();
+    }
+    ws.isAlive = false;
+    ws.ping();
+  }, 30000);
+  
   // Envia status atual da sessão
   if (session.sock?.user) {
     // Já conectado
@@ -612,6 +623,7 @@ wss.on('connection', (ws, req) => {
 
   ws.on('close', () => {
     console.log(`WebSocket desconectado para instância: ${instanceId}`);
+    clearInterval(pingInterval);
     session.clients.delete(ws);
     
     // Se não há mais clientes e não está conectado, limpa a sessão
