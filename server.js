@@ -397,7 +397,7 @@ app.delete('/api/instances/:id', async (req, res) => {
 });
 
 // 🔹 Função para iniciar sessão do WhatsApp
-async function startWhatsAppSession(instanceId, wss) {
+async function startWhatsAppSession(instanceId) {
   try {
     const authDir = `${PUPPETEER_CACHE_DIR}/auth_${instanceId}`;
     const { state, saveCreds } = await useMultiFileAuthState(authDir);
@@ -425,7 +425,7 @@ async function startWhatsAppSession(instanceId, wss) {
           DisconnectReason.loggedOut;
         
         if (shouldReconnect) {
-          startWhatsAppSession(instanceId, wss);
+          startWhatsAppSession(instanceId);
         } else {
           activeSessions.delete(instanceId);
         }
@@ -480,7 +480,7 @@ wss.on('connection', (ws, req) => {
   if (!activeSessions.has(instanceId)) {
     activeSessions.set(instanceId, { sock: null, clients: new Set() });
     // Inicia sessão do WhatsApp
-    startWhatsAppSession(instanceId, wss).catch(console.error);
+    startWhatsAppSession(instanceId).catch(console.error);
   }
   
   const session = activeSessions.get(instanceId);
