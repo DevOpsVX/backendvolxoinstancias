@@ -5,7 +5,25 @@ import { existsSync } from 'fs';
 
 // Função para encontrar o caminho do Chromium instalado pelo Puppeteer
 function findChromiumPath() {
-  // Caminhos possíveis do Chromium
+  console.log(`[WPP] 🔍 Iniciando busca pelo Chromium...`);
+  
+  // Tentar encontrar via comando find (mais dinâmico)
+  try {
+    console.log(`[WPP] Tentando buscar Chromium via find...`);
+    const findCommand = 'find /root/.cache/puppeteer /opt/render/.cache/puppeteer -name chrome -type f 2>/dev/null | head -1';
+    const puppeteerChrome = execSync(findCommand, { encoding: 'utf-8' }).trim();
+    
+    if (puppeteerChrome && existsSync(puppeteerChrome)) {
+      console.log(`[WPP] ✅ Chromium encontrado via find: ${puppeteerChrome}`);
+      return puppeteerChrome;
+    } else {
+      console.log(`[WPP] ⚠️ Find não retornou caminho válido: "${puppeteerChrome}"`);
+    }
+  } catch (err) {
+    console.log(`[WPP] ⚠️ Erro ao executar find:`, err.message);
+  }
+
+  // Caminhos possíveis do Chromium (fallback)
   const possiblePaths = [
     process.env.PUPPETEER_EXECUTABLE_PATH,
     '/root/.cache/puppeteer/chrome/linux-131.0.6778.204/chrome-linux64/chrome',
@@ -15,26 +33,27 @@ function findChromiumPath() {
     '/usr/bin/google-chrome'
   ];
 
-  // Tentar encontrar o Chromium instalado pelo Puppeteer
-  try {
-    const puppeteerChrome = execSync('find ~/.cache/puppeteer -name chrome -type f 2>/dev/null | head -1', { encoding: 'utf-8' }).trim();
-    if (puppeteerChrome && existsSync(puppeteerChrome)) {
-      console.log(`[WPP] ✅ Chromium encontrado via Puppeteer: ${puppeteerChrome}`);
-      return puppeteerChrome;
-    }
-  } catch (err) {
-    console.log(`[WPP] Não foi possível buscar Chromium via find`);
-  }
-
+  console.log(`[WPP] Verificando ${possiblePaths.length} caminhos conhecidos...`);
+  
   // Verificar caminhos conhecidos
   for (const path of possiblePaths) {
-    if (path && existsSync(path)) {
+    if (!path) {
+      console.log(`[WPP] ⚪ Caminho vazio, pulando...`);
+      continue;
+    }
+    
+    console.log(`[WPP] Verificando: ${path}`);
+    
+    if (existsSync(path)) {
       console.log(`[WPP] ✅ Chromium encontrado: ${path}`);
       return path;
+    } else {
+      console.log(`[WPP] ❌ Não existe: ${path}`);
     }
   }
 
-  console.warn(`[WPP] ⚠️ Nenhum caminho de Chromium encontrado, usando padrão do Puppeteer`);
+  console.error(`[WPP] ❌❌❌ NENHUM CAMINHO DE CHROMIUM ENCONTRADO!`);
+  console.error(`[WPP] Isso vai causar erro "Could not find Chrome"`);
   return undefined;
 }
 
