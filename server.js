@@ -4,9 +4,9 @@ import fetch from 'node-fetch';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import { WebSocketServer } from 'ws';
-import makeWASocket, { DisconnectReason, useMultiFileAuthState } from '@whiskeysockets/baileys';
-import { Boom } from '@hapi/boom';
+import wppconnect from '@wppconnect-team/wppconnect';
 import { nanoid } from 'nanoid';
+import { startWhatsAppSession as startWPPSession, closeWhatsAppSession, getPhoneNumber } from './wppconnect-session.js';
 
 dotenv.config();
 const app = express();
@@ -258,7 +258,7 @@ app.get('/api/instances/:id', async (req, res) => {
     // Adiciona informações de sessão ativa
     const sessionInfo = activeSessions.has(id) ? {
       isActive: true,
-      hasSocket: !!activeSessions.get(id).sock,
+      hasSocket: !!activeSessions.get(id).client,
       connectedClients: activeSessions.get(id).clients.size
     } : {
       isActive: false,
@@ -336,8 +336,8 @@ app.post('/api/instances/:id/disconnect', async (req, res) => {
     
     if (activeSessions.has(id)) {
       const session = activeSessions.get(id);
-      if (session.sock) {
-        await session.sock.logout();
+      if (session.client) {
+        await closeWhatsAppSession(session.client);
       }
       activeSessions.delete(id);
     }
@@ -363,8 +363,8 @@ app.post('/api/instances/:id/reconnect', async (req, res) => {
     // Fecha sessão existente se houver
     if (activeSessions.has(id)) {
       const session = activeSessions.get(id);
-      if (session.sock) {
-        await session.sock.logout();
+      if (session.client) {
+        await closeWhatsAppSession(session.client);
       }
       activeSessions.delete(id);
     }
@@ -420,8 +420,8 @@ app.delete('/api/instances/:id', async (req, res) => {
     // Fecha a sessão do WhatsApp se estiver ativa
     if (activeSessions.has(id)) {
       const session = activeSessions.get(id);
-      if (session.sock) {
-        await session.sock.logout();
+      if (session.client) {
+        await closeWhatsAppSession(session.client);
       }
       activeSessions.delete(id);
     }
@@ -439,163 +439,71 @@ app.delete('/api/instances/:id', async (req, res) => {
   }
 });
 
-// 🔹 Função para iniciar sessão do WhatsApp
-async function startWhatsAppSession(instanceId, retryCount = 0) {
-  const MAX_RETRIES = 3;
-  const RETRY_DELAY = 5000; // 5 segundos
+// 🔹 Função para iniciar sessão do WhatsApp com WPPConnect
+async function startWhatsAppSession(instanceId) {
+  console.log(`[WPP] Iniciando sessão WhatsApp para instância: ${instanceId}`);
   
   try {
-    console.log(`[WA] Iniciando sessão WhatsApp para instância: ${instanceId} (tentativa ${retryCount + 1}/${MAX_RETRIES + 1})`);
-    const authDir = `${PUPPETEER_CACHE_DIR}/auth_${instanceId}`;
-    console.log(`[WA] Diretório de autenticação: ${authDir}`);
-    
-    // Limpa pasta de autenticação antiga (pode estar corrompida)
-    try {
-      const fs = await import('fs/promises');
-      await fs.rm(authDir, { recursive: true, force: true });
-      console.log(`[WA] Pasta de autenticação antiga removida`);
-    } catch (err) {
-      console.log(`[WA] Nenhuma pasta antiga para remover (primeira conexão)`);
-    }
-    
-    const { state, saveCreds } = await useMultiFileAuthState(authDir);
-    console.log(`[WA] Estado de autenticação carregado (limpo)`);
-
-    const sock = makeWASocket({
-      auth: state,
-      printQRInTerminal: false,
-      browser: ['Volxo WhatsApp', 'Chrome', '120.0.0'],
-      // Timeouts otimizados para ambientes com rede instável
-      connectTimeoutMs: 60000, // 1 minuto (reduzido para falhar mais rápido e tentar retry)
-      defaultQueryTimeoutMs: 60000, // 1 minuto
-      keepAliveIntervalMs: 20000, // 20 segundos (mais frequente)
-      retryRequestDelayMs: 2000, // 2 segundos (mais rápido)
-      maxMsgRetryCount: 5, // 5 tentativas
-      qrTimeout: 60000, // 60 segundos para QR Code
-      // Configurações para melhor estabilidade
-      syncFullHistory: false,
-      markOnlineOnConnect: false, // Desabilita para evitar overhead inicial
-      fireInitQueries: false, // Desabilita para conexão mais rápida
-      emitOwnEvents: false,
-      generateHighQualityLinkPreview: false,
-      getMessage: async () => undefined,
-      // Configurações adicionais para melhor compatibilidade
-      shouldIgnoreJid: () => false,
-      shouldSyncHistoryMessage: () => false,
-      patchMessageBeforeSending: (message) => message
-    });
-    console.log(`[WA] Socket WhatsApp criado`);
-
-    activeSessions.set(instanceId, { sock, clients: new Set() });
-
-    sock.ev.on('creds.update', saveCreds);
-
-    sock.ev.on('connection.update', async (update) => {
-      const { connection, lastDisconnect, qr, isNewLogin, isOnline, receivedPendingNotifications } = update;
-      
-      console.log(`[WA] === UPDATE DE CONEXÃO ===`);
-      console.log(`[WA] Instância: ${instanceId}`);
-      console.log(`[WA] Status: ${connection || 'N/A'}`);
-      console.log(`[WA] Tem QR: ${!!qr}`);
-      console.log(`[WA] Novo Login: ${isNewLogin || 'N/A'}`);
-      console.log(`[WA] Online: ${isOnline || 'N/A'}`);
-      console.log(`[WA] Pending Notif: ${receivedPendingNotifications || 'N/A'}`);
-      
-      if (lastDisconnect) {
-        console.log(`[WA] Última desconexão:`, {
-          statusCode: lastDisconnect?.error?.output?.statusCode,
-          message: lastDisconnect?.error?.message,
-          stack: lastDisconnect?.error?.stack?.substring(0, 200)
-        });
-        
-        // Log adicional para erro 405
-        if (lastDisconnect?.error?.output?.statusCode === 405) {
-          console.log(`[WA] 🚨 ERRO 405 DETECTADO - Connection Failure`);
-          console.log(`[WA] Isso geralmente indica problema de rede/firewall`);
-          console.log(`[WA] Retry automático será acionado se disponível`);
-        }
-      }
-
-      if (qr) {
-        console.log(`[WA] ✅ QR CODE GERADO!`);
-        console.log(`[WA] QR Code length: ${qr.length}`);
-        console.log(`[WA] QR Code (primeiros 50 chars): ${qr.substring(0, 50)}...`);
+    const client = await startWPPSession(
+      instanceId,
+      // Callback quando QR Code é gerado
+      async (base64Qr) => {
+        console.log(`[WPP] ✅ QR CODE GERADO!`);
+        console.log(`[WPP] QR Code length: ${base64Qr.length}`);
         
         // Salva QR Code no Supabase para polling HTTP
         try {
           await supabase
             .from('installations')
             .update({ 
-              qr_code: qr,
+              qr_code: base64Qr,
               qr_code_updated_at: new Date().toISOString()
             })
             .eq('instance_id', instanceId);
-          console.log(`[WA] QR Code salvo no Supabase para ${instanceId}`);
+          console.log(`[WPP] QR Code salvo no Supabase para ${instanceId}`);
         } catch (err) {
-          console.error(`[WA] Erro ao salvar QR Code no Supabase:`, err);
+          console.error(`[WPP] Erro ao salvar QR Code no Supabase:`, err);
         }
         
         // Também envia via WebSocket (fallback)
-        broadcastToInstance(instanceId, { type: 'qr', data: qr });
-      }
-
-      if (connection === 'close') {
-        const statusCode = lastDisconnect?.error?.output?.statusCode;
-        const errorMessage = lastDisconnect?.error?.message || '';
-        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+        broadcastToInstance(instanceId, { type: 'qr', data: base64Qr });
+      },
+      // Callback de mudança de status
+      async (status) => {
+        console.log(`[WPP] Status mudou para: ${status}`);
         
-        // Identifica tipo de erro
-        let reason = 'connection lost';
-        let userMessage = 'Conexão perdida. Tente novamente.';
-        
-        if (statusCode === DisconnectReason.loggedOut) {
-          reason = 'logged out';
-          userMessage = 'Sessão encerrada. Escaneie o QR Code novamente.';
-        } else if (errorMessage.includes('Stream Errored') || errorMessage.includes('restart required')) {
-          reason = 'stream error';
-          userMessage = 'Erro de conexão com WhatsApp. Tente escanear o QR Code mais rapidamente ou verifique se o número não está conectado em outro lugar.';
-        } else if (errorMessage.includes('timed out') || errorMessage.includes('timeout')) {
-          reason = 'timeout';
-          userMessage = 'Tempo esgotado. Tente novamente com conexão mais estável.';
-        } else if (statusCode === 515) {
-          reason = 'restart required';
-          userMessage = 'WhatsApp requer reinicialização. Clique em "Tentar Novamente".';
+        if (status === 'qrReadFail' || status === 'qrReadError') {
+          // QR Code expirou ou erro ao ler
+          console.log(`[WPP] ❌ Erro ao ler QR Code`);
+          
+          // Limpa QR Code do banco
+          try {
+            await supabase
+              .from('installations')
+              .update({ 
+                qr_code: null,
+                qr_code_updated_at: null
+              })
+              .eq('instance_id', instanceId);
+          } catch (err) {
+            console.error(`[WPP] Erro ao limpar QR Code:`, err);
+          }
+          
+          broadcastToInstance(instanceId, { 
+            type: 'status', 
+            data: 'disconnected',
+            reason: 'qr_read_fail',
+            message: 'Erro ao ler QR Code. Tente novamente.'
+          });
         }
+      },
+      // Callback quando conectado
+      async (client) => {
+        console.log(`[WPP] ✅ WhatsApp conectado com sucesso!`);
         
-        console.log(`[WA] Conexão fechada para ${instanceId}`);
-        console.log(`[WA] Status Code: ${statusCode}`);
-        console.log(`[WA] Error Message: ${errorMessage}`);
-        console.log(`[WA] Razão: ${reason}`);
-        console.log(`[WA] Deve reconectar: ${shouldReconnect}`);
-        
-        // Limpa QR Code do banco quando conexão fecha
-        try {
-          await supabase
-            .from('installations')
-            .update({ 
-              qr_code: null,
-              qr_code_updated_at: null
-            })
-            .eq('instance_id', instanceId);
-          console.log(`[WA] QR Code limpo do Supabase`);
-        } catch (err) {
-          console.error(`[WA] Erro ao limpar QR Code:`, err);
-        }
-        
-        // Remove sessão do mapa
-        activeSessions.delete(instanceId);
-        
-        // Envia notificação de desconexão
-        console.log(`[WA] Enviando notificação de desconexão para ${instanceId}`);
-        broadcastToInstance(instanceId, { 
-          type: 'status', 
-          data: 'disconnected',
-          reason: reason,
-          statusCode: statusCode,
-          message: userMessage
-        });
-      } else if (connection === 'open') {
-        const phoneNumber = sock.user?.id?.split(':')[0];
+        // Obtém número de telefone
+        const phoneNumber = await getPhoneNumber(client);
+        console.log(`[WPP] Número de telefone: ${phoneNumber}`);
         
         // Atualiza no banco de dados e limpa QR Code
         await supabase
@@ -610,22 +518,21 @@ async function startWhatsAppSession(instanceId, retryCount = 0) {
         // Notifica clientes
         broadcastToInstance(instanceId, { type: 'status', data: 'connected' });
       }
-    });
-
-    return sock;
-  } catch (err) {
-    console.error(`[WA] Erro ao iniciar sessão WhatsApp para ${instanceId} (tentativa ${retryCount + 1}/${MAX_RETRIES + 1}):`, err);
+    );
     
-    // Se ainda temos tentativas, aguarda e tenta novamente
-    if (retryCount < MAX_RETRIES) {
-      console.log(`[WA] Aguardando ${RETRY_DELAY}ms antes de tentar novamente...`);
-      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-      console.log(`[WA] Tentando reconectar...`);
-      return startWhatsAppSession(instanceId, retryCount + 1);
+    // Armazena cliente na sessão
+    if (!activeSessions.has(instanceId)) {
+      activeSessions.set(instanceId, { client, clients: new Set() });
+    } else {
+      const session = activeSessions.get(instanceId);
+      session.client = client;
     }
     
-    // Se esgotou as tentativas, lança o erro
-    console.error(`[WA] ❌ Todas as ${MAX_RETRIES + 1} tentativas falharam para ${instanceId}`);
+    console.log(`[WPP] Cliente WPPConnect armazenado para ${instanceId}`);
+    return client;
+    
+  } catch (err) {
+    console.error(`[WPP] ❌ Erro ao iniciar sessão WhatsApp:`, err);
     throw err;
   }
 }
