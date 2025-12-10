@@ -34,7 +34,9 @@ export async function startWhatsAppSession(instanceId, onQRCode, onStatusChange,
       logQR: false, // Não imprime QR no terminal
       disableWelcome: true, // Desabilita mensagem de boas-vindas
       updatesLog: false, // Desabilita logs de atualização
-      autoClose: 60000, // Fecha automaticamente após 60s sem escanear QR
+      autoClose: 180000, // Fecha automaticamente após 180s (3 minutos) sem escanear QR
+      waitForLogin: true, // Aguarda login antes de continuar
+      createPathFileToken: true, // Cria diretório de tokens automaticamente
       puppeteerOptions: {
         headless: true,
         args: [
