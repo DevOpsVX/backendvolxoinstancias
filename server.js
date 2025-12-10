@@ -29,7 +29,43 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 
 console.log('✅ Variáveis de ambiente do Supabase configuradas');
 console.log('🔍 GHL_REDIRECT_URI:', process.env.GHL_REDIRECT_URI);
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// Criar cliente Supabase com configuração customizada para debug
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false
+  },
+  global: {
+    fetch: async (...args) => {
+      console.log('🌍 [SUPABASE FETCH] Tentando conectar:', args[0]);
+      try {
+        const response = await fetch(...args);
+        console.log('✅ [SUPABASE FETCH] Resposta recebida:', response.status);
+        return response;
+      } catch (error) {
+        console.error('❌ [SUPABASE FETCH] Erro:', error.message);
+        console.error('🔍 [SUPABASE FETCH] Error details:', error);
+        throw error;
+      }
+    }
+  }
+});
+
+// Testar conectividade com Supabase
+(async () => {
+  try {
+    console.log('🧪 Testando conectividade com Supabase...');
+    const { data, error } = await supabase.from('installations').select('count', { count: 'exact', head: true });
+    if (error) {
+      console.error('❌ Erro ao testar Supabase:', error);
+    } else {
+      console.log('✅ Conexão com Supabase OK!');
+    }
+  } catch (err) {
+    console.error('❌ Erro crítico ao testar Supabase:', err);
+  }
+})();
 
 const GHL_CLIENT_ID = process.env.GHL_CLIENT_ID;
 const GHL_CLIENT_SECRET = process.env.GHL_CLIENT_SECRET;
