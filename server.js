@@ -4,9 +4,26 @@ import fetch from 'node-fetch';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import dns from 'dns';
+import { promisify } from 'util';
 
-// Forçar uso de IPv4 no Node.js
+// Forçar uso de IPv4 no Node.js e configurar DNS público
 dns.setDefaultResultOrder('ipv4first');
+dns.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1']); // Google DNS e Cloudflare DNS
+
+console.log('🌍 Servidores DNS configurados:', dns.getServers());
+
+// Testar resolução DNS do Supabase
+const dnsResolve = promisify(dns.resolve4);
+(async () => {
+  try {
+    const supabaseHost = 'fszevxcxysexngawtpth.supabase.co';
+    console.log(`🔍 Testando resolução DNS para ${supabaseHost}...`);
+    const addresses = await dnsResolve(supabaseHost);
+    console.log(`✅ DNS resolvido com sucesso! IPs:`, addresses);
+  } catch (err) {
+    console.error('❌ Erro ao resolver DNS:', err.message);
+  }
+})();
 import { WebSocketServer } from 'ws';
 import wppconnect from '@wppconnect-team/wppconnect';
 import { nanoid } from 'nanoid';
