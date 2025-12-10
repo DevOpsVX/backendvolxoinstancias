@@ -53,19 +53,18 @@ export async function startWhatsAppSession(instanceId, onQRCode, onStatusChange,
       autoClose: 180000, // Fecha automaticamente após 180s (3 minutos) sem escanear QR
       waitForLogin: true, // Aguarda login antes de continuar
       createPathFileToken: true, // Cria diretório de tokens automaticamente
-      puppeteerOptions: {
-        headless: true,
-        executablePath: getChromiumPath(),
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--no-first-run',
-          '--no-zygote',
-          '--disable-gpu'
-        ]
-      }
+      // WPPConnect usa browserPathExecutable ao invés de executablePath
+      browserPathExecutable: getChromiumPath(),
+      browserArgs: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--disable-gpu'
+      ],
+      headless: true
     });
     
     console.log(`[WPP] Cliente WPPConnect criado com sucesso para ${instanceId}`);
