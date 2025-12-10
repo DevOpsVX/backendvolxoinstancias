@@ -26,8 +26,14 @@ function findChromiumPath() {
   // Caminhos possíveis do Chromium (fallback)
   const possiblePaths = [
     process.env.PUPPETEER_EXECUTABLE_PATH,
-    '/root/.cache/puppeteer/chrome/linux-131.0.6778.204/chrome-linux64/chrome',
+    // Render (caminho confirmado nos logs de build)
     '/opt/render/.cache/puppeteer/chrome/linux-131.0.6778.204/chrome-linux64/chrome',
+    // Outras versões possíveis no Render
+    '/opt/render/.cache/puppeteer/chrome/linux-130.0.6723.116/chrome-linux64/chrome',
+    '/opt/render/.cache/puppeteer/chrome/linux-129.0.6668.100/chrome-linux64/chrome',
+    // Railway/outros ambientes
+    '/root/.cache/puppeteer/chrome/linux-131.0.6778.204/chrome-linux64/chrome',
+    // Sistema
     '/usr/bin/chromium',
     '/usr/bin/chromium-browser',
     '/usr/bin/google-chrome'
