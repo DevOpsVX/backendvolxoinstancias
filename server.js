@@ -3,6 +3,10 @@ import cors from 'cors';
 import fetch from 'node-fetch';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
+import dns from 'dns';
+
+// Forçar uso de IPv4 no Node.js
+dns.setDefaultResultOrder('ipv4first');
 import { WebSocketServer } from 'ws';
 import wppconnect from '@wppconnect-team/wppconnect';
 import { nanoid } from 'nanoid';
