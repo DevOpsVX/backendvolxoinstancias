@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "build": "npm install && npx puppeteer browsers install chrome && echo '=== Estrutura do Chromium instalado ===' && ls -la /opt/render/.cache/puppeteer/chrome/ 2>/dev/null && echo '=== Listando subdiretórios ===' && find /opt/render/.cache/puppeteer/chrome -maxdepth 3 -type d 2>/dev/null && echo '=== Fim da estrutura ==='",
+    "build": "export PUPPETEER_CACHE_DIR=$PWD/.cache/puppeteer && npm install && npx puppeteer browsers install chrome && echo '=== Chromium instalado em $PUPPETEER_CACHE_DIR ===' && ls -la $PWD/.cache/puppeteer/chrome/ 2>/dev/null && echo '=== Fim ==='",
     "postinstall": "npx puppeteer browsers install chrome || echo 'Chromium install failed, will retry on build'"
   },
   "dependencies": {

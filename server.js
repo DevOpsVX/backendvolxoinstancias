@@ -43,7 +43,11 @@ const GHL_SCOPES =
   'conversations.readonly conversations.write conversations/message.readonly conversations/message.write conversations/reports.readonly contacts.readonly contacts.write oauth.write oauth.readonly conversation-ai.readonly conversation-ai.write locations.write locations.readonly custom-menu-link.readonly custom-menu-link.write marketplace-installer-details.readonly numberpools.read phonenumbers.read';
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
-const PUPPETEER_CACHE_DIR = process.env.PUPPETEER_CACHE_DIR || '/opt/render/.cache/puppeteer';
+const PUPPETEER_CACHE_DIR = process.env.PUPPETEER_CACHE_DIR || `${process.cwd()}/.cache/puppeteer`;
+
+// Configurar PUPPETEER_CACHE_DIR para o Puppeteer
+process.env.PUPPETEER_CACHE_DIR = PUPPETEER_CACHE_DIR;
+console.log(`📁 PUPPETEER_CACHE_DIR configurado: ${PUPPETEER_CACHE_DIR}`);
 
 // Armazenamento de sessões ativas do WhatsApp
 const activeSessions = new Map();
