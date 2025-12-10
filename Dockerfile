@@ -40,10 +40,7 @@ RUN npm ci --only=production
 # Copiar código da aplicação
 COPY . .
 
-# Configurar variáveis de ambiente para Puppeteer
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
-ENV CHROME_BIN=/usr/bin/chromium
+# Puppeteer irá baixar e usar seu próprio Chromium
 
 # Expor porta
 EXPOSE 8080
