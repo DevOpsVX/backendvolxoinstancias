@@ -1,17 +1,20 @@
 // 🔹 Função para iniciar sessão do WhatsApp com WPPConnect
 import wppconnect from '@wppconnect-team/wppconnect';
+import puppeteer from 'puppeteer';
 
-// Função para encontrar o caminho do Chromium instalado pelo Puppeteer
-function findChromiumPath() {
-  console.log(`[WPP] 🔍 Configurando caminho do Chromium...`);
-  
-  // Caminho onde o Puppeteer instala o Chromium no Render (confirmado nos logs de build)
-  const chromiumPath = '/opt/render/.cache/puppeteer/chrome/linux-131.0.6778.204/chrome-linux64/chrome';
-  
-  console.log(`[WPP] ✅ Usando Chromium: ${chromiumPath}`);
-  console.log(`[WPP] 💡 Se houver erro "Could not find Chrome", verifique se o build instalou o Chromium`);
-  
-  return chromiumPath;
+// Função para obter o caminho do Chromium usando Puppeteer
+function getChromiumPath() {
+  try {
+    console.log(`[WPP] 🔍 Obtendo caminho do Chromium via Puppeteer...`);
+    const chromiumPath = puppeteer.executablePath();
+    console.log(`[WPP] ✅ Chromium encontrado: ${chromiumPath}`);
+    return chromiumPath;
+  } catch (err) {
+    console.error(`[WPP] ❌ Erro ao obter caminho do Chromium:`, err);
+    console.log(`[WPP] ⚠️ Tentando usar caminho padrão...`);
+    // Fallback para caminho padrão do Render
+    return '/opt/render/.cache/puppeteer/chrome/linux-131.0.6778.204/chrome-linux64/chrome';
+  }
 }
 
 export async function startWhatsAppSession(instanceId, onQRCode, onStatusChange, onReady) {
@@ -52,7 +55,7 @@ export async function startWhatsAppSession(instanceId, onQRCode, onStatusChange,
       createPathFileToken: true, // Cria diretório de tokens automaticamente
       puppeteerOptions: {
         headless: true,
-        executablePath: findChromiumPath(),
+        executablePath: getChromiumPath(),
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
