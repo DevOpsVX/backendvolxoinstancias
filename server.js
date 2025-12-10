@@ -28,6 +28,7 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 }
 
 console.log('✅ Variáveis de ambiente do Supabase configuradas');
+console.log('🔍 GHL_REDIRECT_URI:', process.env.GHL_REDIRECT_URI);
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const GHL_CLIENT_ID = process.env.GHL_CLIENT_ID;
