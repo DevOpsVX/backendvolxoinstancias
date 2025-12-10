@@ -4,7 +4,8 @@
   "description": "Backend API for Volxo WhatsApp Connection",
   "type": "module",
   "scripts": {
-    "start": "PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium node server.js"
+    "start": "node server.js",
+    "build": "bash render-build.sh"
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
