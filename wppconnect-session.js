@@ -1,5 +1,42 @@
 // 🔹 Função para iniciar sessão do WhatsApp com WPPConnect
 import wppconnect from '@wppconnect-team/wppconnect';
+import { execSync } from 'child_process';
+import { existsSync } from 'fs';
+
+// Função para encontrar o caminho do Chromium instalado pelo Puppeteer
+function findChromiumPath() {
+  // Caminhos possíveis do Chromium
+  const possiblePaths = [
+    process.env.PUPPETEER_EXECUTABLE_PATH,
+    '/root/.cache/puppeteer/chrome/linux-131.0.6778.204/chrome-linux64/chrome',
+    '/opt/render/.cache/puppeteer/chrome/linux-131.0.6778.204/chrome-linux64/chrome',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/google-chrome'
+  ];
+
+  // Tentar encontrar o Chromium instalado pelo Puppeteer
+  try {
+    const puppeteerChrome = execSync('find ~/.cache/puppeteer -name chrome -type f 2>/dev/null | head -1', { encoding: 'utf-8' }).trim();
+    if (puppeteerChrome && existsSync(puppeteerChrome)) {
+      console.log(`[WPP] ✅ Chromium encontrado via Puppeteer: ${puppeteerChrome}`);
+      return puppeteerChrome;
+    }
+  } catch (err) {
+    console.log(`[WPP] Não foi possível buscar Chromium via find`);
+  }
+
+  // Verificar caminhos conhecidos
+  for (const path of possiblePaths) {
+    if (path && existsSync(path)) {
+      console.log(`[WPP] ✅ Chromium encontrado: ${path}`);
+      return path;
+    }
+  }
+
+  console.warn(`[WPP] ⚠️ Nenhum caminho de Chromium encontrado, usando padrão do Puppeteer`);
+  return undefined;
+}
 
 export async function startWhatsAppSession(instanceId, onQRCode, onStatusChange, onReady) {
   console.log(`[WPP] Iniciando sessão WhatsApp para instância: ${instanceId}`);
@@ -39,6 +76,7 @@ export async function startWhatsAppSession(instanceId, onQRCode, onStatusChange,
       createPathFileToken: true, // Cria diretório de tokens automaticamente
       puppeteerOptions: {
         headless: true,
+        executablePath: findChromiumPath(),
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
