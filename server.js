@@ -3,27 +3,6 @@ import cors from 'cors';
 import fetch from 'node-fetch';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
-import dns from 'dns';
-import { promisify } from 'util';
-
-// Forçar uso de IPv4 no Node.js e configurar DNS público
-dns.setDefaultResultOrder('ipv4first');
-dns.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1']); // Google DNS e Cloudflare DNS
-
-console.log('🌍 Servidores DNS configurados:', dns.getServers());
-
-// Testar resolução DNS do Supabase
-const dnsResolve = promisify(dns.resolve4);
-(async () => {
-  try {
-    const supabaseHost = 'fszevxcxysexngawtpth.supabase.co';
-    console.log(`🔍 Testando resolução DNS para ${supabaseHost}...`);
-    const addresses = await dnsResolve(supabaseHost);
-    console.log(`✅ DNS resolvido com sucesso! IPs:`, addresses);
-  } catch (err) {
-    console.error('❌ Erro ao resolver DNS:', err.message);
-  }
-})();
 import { WebSocketServer } from 'ws';
 import wppconnect from '@wppconnect-team/wppconnect';
 import { nanoid } from 'nanoid';
@@ -49,44 +28,7 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 }
 
 console.log('✅ Variáveis de ambiente do Supabase configuradas');
-console.log('🔍 GHL_REDIRECT_URI:', process.env.GHL_REDIRECT_URI);
-
-// Criar cliente Supabase com configuração customizada para debug
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false
-  },
-  global: {
-    fetch: async (...args) => {
-      console.log('🌍 [SUPABASE FETCH] Tentando conectar:', args[0]);
-      try {
-        const response = await fetch(...args);
-        console.log('✅ [SUPABASE FETCH] Resposta recebida:', response.status);
-        return response;
-      } catch (error) {
-        console.error('❌ [SUPABASE FETCH] Erro:', error.message);
-        console.error('🔍 [SUPABASE FETCH] Error details:', error);
-        throw error;
-      }
-    }
-  }
-});
-
-// Testar conectividade com Supabase
-(async () => {
-  try {
-    console.log('🧪 Testando conectividade com Supabase...');
-    const { data, error } = await supabase.from('installations').select('count', { count: 'exact', head: true });
-    if (error) {
-      console.error('❌ Erro ao testar Supabase:', error);
-    } else {
-      console.log('✅ Conexão com Supabase OK!');
-    }
-  } catch (err) {
-    console.error('❌ Erro crítico ao testar Supabase:', err);
-  }
-})();
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const GHL_CLIENT_ID = process.env.GHL_CLIENT_ID;
 const GHL_CLIENT_SECRET = process.env.GHL_CLIENT_SECRET;
