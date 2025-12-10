@@ -73,10 +73,26 @@ export async function closeWhatsAppSession(client) {
 
 export async function getPhoneNumber(client) {
   try {
-    const hostDevice = await client.getHostDevice();
-    return hostDevice.id.user;
+    // WPPConnect usa getWid() para obter o ID do WhatsApp
+    const wid = await client.getWid();
+    console.log(`[WPP] WID obtido:`, wid);
+    
+    // Extrai apenas o número (remove @c.us)
+    const phoneNumber = wid ? wid.user || wid._serialized.split('@')[0] : null;
+    console.log(`[WPP] Número extraído: ${phoneNumber}`);
+    
+    return phoneNumber;
   } catch (err) {
     console.error(`[WPP] Erro ao obter número de telefone:`, err);
-    return null;
+    
+    // Tenta método alternativo
+    try {
+      const hostDevice = await client.getHostDevice();
+      console.log(`[WPP] Host device:`, hostDevice);
+      return hostDevice?.id?.user || hostDevice?.wid?.user || null;
+    } catch (err2) {
+      console.error(`[WPP] Erro no método alternativo:`, err2);
+      return null;
+    }
   }
 }
