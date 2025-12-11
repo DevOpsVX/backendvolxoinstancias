@@ -1,5 +1,5 @@
-# Use Node.js 22 (mesma versão do ambiente)
-FROM node:22-slim
+# Use Node.js 18 (versão configurada no render.yaml)
+FROM node:18-slim
 
 # Instalar dependências do Chromium
 RUN apt-get update && apt-get install -y \
@@ -35,15 +35,17 @@ WORKDIR /app
 COPY package*.json ./
 
 # Instalar dependências do Node.js
-RUN npm ci --only=production
+RUN npm install
 
 # Copiar código da aplicação
 COPY . .
 
-# Puppeteer irá baixar e usar seu próprio Chromium
+# Instalar Chrome via Puppeteer
+ENV PUPPETEER_CACHE_DIR=/app/.cache/puppeteer
+RUN mkdir -p $PUPPETEER_CACHE_DIR && npx puppeteer browsers install chrome
 
-# Expor porta
-EXPOSE 8080
+# Expor porta (Render usa variável PORT)
+EXPOSE 10000
 
 # Comando para iniciar o servidor
-CMD ["node", "server.js"]
+CMD ["npm", "start"]
