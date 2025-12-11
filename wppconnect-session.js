@@ -1,17 +1,24 @@
-// wppconnect-session.ts
+// wppconnect-session.js
 
 import wppconnect from '@wppconnect-team/wppconnect';
 import puppeteer from 'puppeteer';
 
+/**
+ * Inicia uma sessão do WhatsApp usando WPPConnect.
+ *
+ * @param {string} instanceId - ID da instância (sessão) que você usa no seu sistema
+ * @param {(qrBase64: string) => void} [onQRCode] - Callback para quando o QR Code for gerado
+ * @param {(status: string) => void} [onStatusChange] - Callback para mudança de status da sessão
+ * @param {(client: any) => void} [onReady] - Callback quando a sessão estiver conectada (inChat)
+ */
 export async function startWhatsAppSession(
-  instanceId: string,
-  onQRCode?: (base64Qr: string) => void,
-  onStatusChange?: (status: string) => void,
-  onReady?: (client: any) => void,
+  instanceId,
+  onQRCode,
+  onStatusChange,
+  onReady
 ) {
   console.log(`[WPP] Iniciando sessão WhatsApp para instância: ${instanceId}`);
 
-  // 1. Descobrir o executável que o Puppeteer baixou
   console.log('[WPP] 🔍 Obtendo executablePath via Puppeteer...');
   const executablePath = puppeteer.executablePath();
   console.log(`[WPP] ✅ executablePath resolvido: ${executablePath}`);
@@ -22,10 +29,10 @@ export async function startWhatsAppSession(
     const client = await wppconnect.create({
       session: instanceId,
 
-      // 🔴 ESSA LINHA É A MAIS IMPORTANTE
+      // 🔴 ESSA LINHA É FUNDAMENTAL: aponta pro Chrome/Chromium baixado pelo Puppeteer
       browserPathExecutable: executablePath,
 
-      // Argumentos obrigatórios para rodar no Render (sem sandbox)
+      // Args para rodar em ambiente como Render (sem sandbox)
       browserArgs: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -33,10 +40,10 @@ export async function startWhatsAppSession(
         '--disable-accelerated-2d-canvas',
         '--no-first-run',
         '--no-zygote',
-        '--disable-gpu',
+        '--disable-gpu'
       ],
 
-      // Garante que o puppeteer-extra dentro do wppconnect também use esse executável
+      // Garante que o puppeteer interno do WPPConnect use o mesmo executável
       puppeteerOptions: {
         executablePath,
         headless: true,
@@ -47,45 +54,57 @@ export async function startWhatsAppSession(
           '--disable-accelerated-2d-canvas',
           '--no-first-run',
           '--no-zygote',
-          '--disable-gpu',
-        ],
+          '--disable-gpu'
+        ]
       },
 
       catchQR: (base64Qr, asciiQR, attempts, urlCode) => {
         console.log(`[WPP] ✅ QR CODE GERADO! (tentativa ${attempts})`);
-        console.log(`[WPP] QR Code length: ${base64Qr?.length}`);
+        console.log(`[WPP] QR Code length: ${base64Qr ? base64Qr.length : 0}`);
 
-        if (onQRCode) onQRCode(base64Qr);
+        if (onQRCode) {
+          onQRCode(base64Qr);
+        }
       },
 
       statusFind: (statusSession, session) => {
         console.log(`[WPP] Status da sessão ${session}: ${statusSession}`);
 
-        if (onStatusChange) onStatusChange(statusSession);
+        if (onStatusChange) {
+          onStatusChange(statusSession);
+        }
 
         if (statusSession === 'inChat') {
           console.log('[WPP] ✅ WhatsApp conectado com sucesso!');
-          if (onReady) onReady(client);
+          if (onReady) {
+            onReady(client);
+          }
         }
       },
 
       logQR: false,
       disableWelcome: true,
       updatesLog: false,
-      autoClose: 180000,
+      autoClose: 180000, // 3 minutos
       waitForLogin: true,
-      createPathFileToken: true,
+      createPathFileToken: true
     });
 
     console.log(`[WPP] Cliente WPPConnect criado com sucesso para ${instanceId}`);
     return client;
-  } catch (err: any) {
+  } catch (err) {
     console.error('[WPP] ❌ Erro ao iniciar sessão WhatsApp:', err);
-    throw new Error(`Falha ao iniciar WPPConnect: ${err?.message || 'Erro desconhecido'}`);
+    const message = err?.message || 'Erro desconhecido ao iniciar sessão';
+    throw new Error(`Falha ao iniciar WPPConnect: ${message}`);
   }
 }
 
-export async function closeWhatsAppSession(client: any) {
+/**
+ * Fecha a sessão do WhatsApp.
+ *
+ * @param {any} client - Instância do client WPPConnect
+ */
+export async function closeWhatsAppSession(client) {
   try {
     if (client) {
       await client.close();
@@ -96,7 +115,13 @@ export async function closeWhatsAppSession(client: any) {
   }
 }
 
-export async function getPhoneNumber(client: any) {
+/**
+ * Obtém o número de telefone da conta conectada.
+ *
+ * @param {any} client - Instância do client WPPConnect
+ * @returns {Promise<string|null>}
+ */
+export async function getPhoneNumber(client) {
   try {
     const wid = await client.getWid();
     console.log('[WPP] WID obtido:', wid);
@@ -107,6 +132,7 @@ export async function getPhoneNumber(client: any) {
     return phoneNumber;
   } catch (err) {
     console.error('[WPP] Erro ao obter número de telefone (getWid):', err);
+
     try {
       const hostDevice = await client.getHostDevice();
       console.log('[WPP] Host device:', hostDevice);
