@@ -598,6 +598,13 @@ wss.on('connection', (ws, req) => {
   const session = activeSessions.get(instanceId);
   session.clients.add(ws);
   
+  // Cancela timeout de limpeza se existir (cliente reconectou)
+  if (session.cleanupTimeout) {
+    clearTimeout(session.cleanupTimeout);
+    session.cleanupTimeout = null;
+    console.log(`[WS] Timeout de limpeza cancelado para ${instanceId}`);
+  }
+  
   // Configura ping/pong para manter conexão viva
   ws.isAlive = true;
   ws.on('pong', () => {
@@ -641,8 +648,19 @@ wss.on('connection', (ws, req) => {
           return;
         }
         
-        // Inicia nova sessão
-        await startWhatsAppSession(instanceId);
+        // Inicia nova sessão e armazena o cliente retornado
+        try {
+          const client = await startWhatsAppSession(instanceId);
+          // Atualiza a referência da sessão para garantir que o cliente seja armazenado
+          session.client = client;
+          console.log(`[WS] Cliente armazenado com sucesso para ${instanceId}`);
+        } catch (err) {
+          console.error(`[WS] Erro ao iniciar sessão:`, err);
+          ws.send(JSON.stringify({ 
+            type: 'error', 
+            data: 'Erro ao iniciar sessão WhatsApp. Tente novamente.' 
+          }));
+        }
       }
     } catch (err) {
       console.error(`[WS] Erro ao processar mensagem:`, err);
