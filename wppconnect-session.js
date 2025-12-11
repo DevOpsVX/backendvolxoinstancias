@@ -5,114 +5,151 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
+// Diretório padrão de cache no Render
 const DEFAULT_CACHE_DIR = '/opt/render/.cache/puppeteer';
 
-/**
- * Garante que o Chromium/Chrome do Puppeteer está realmente instalado
- * e retorna o executablePath válido.
- */
-async function ensureChromiumInstalled() {
+function getCacheDir() {
   const cacheDir = process.env.PUPPETEER_CACHE_DIR || DEFAULT_CACHE_DIR;
-  process.env.PUPPETEER_CACHE_DIR = cacheDir;
-
   console.log(`[WPP] 📁 Usando cache Puppeteer em: ${cacheDir}`);
+  return cacheDir;
+}
 
-  // 1. Tenta usar o executablePath atual
-  let executablePath = '';
-  try {
-    executablePath = puppeteer.executablePath();
-    console.log(`[WPP] 🔍 Puppeteer executável sugerido: ${executablePath}`);
-  } catch (err) {
-    console.log('[WPP] ⚠️ puppeteer.executablePath() falhou:', err.message);
+function ensureDir(dirPath) {
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true });
   }
-
-  if (executablePath && fs.existsSync(executablePath)) {
-    console.log('[WPP] ✅ Chromium encontrado (já instalado).');
-    return executablePath;
-  }
-
-  // 2. Se não existir, tentamos instalar agora
-  console.log('[WPP] ⚙️ Chromium não encontrado. Instalando via `npx puppeteer browsers install chrome`...');
-  try {
-    execSync('npx puppeteer browsers install chrome', {
-      stdio: 'inherit',
-      env: { ...process.env, PUPPETEER_CACHE_DIR: cacheDir }
-    });
-  } catch (err) {
-    console.error('[WPP] ❌ Falha ao instalar Chrome via Puppeteer:', err.message);
-  }
-
-  // 3. Depois da instalação, checamos de novo
-  try {
-    executablePath = puppeteer.executablePath();
-    console.log(`[WPP] 🔁 Novo executablePath depois da instalação: ${executablePath}`);
-  } catch (err) {
-    console.log('[WPP] ⚠️ puppeteer.executablePath() falhou após instalação:', err.message);
-  }
-
-  if (executablePath && fs.existsSync(executablePath)) {
-    console.log('[WPP] ✅ Chromium encontrado após instalação.');
-    return executablePath;
-  }
-
-  // 4. Última tentativa: varrer o diretório de cache manualmente
-  const chromeDir = path.join(cacheDir, 'chrome');
-  if (fs.existsSync(chromeDir)) {
-    const versions = fs.readdirSync(chromeDir);
-    console.log('[WPP] 🔎 Versões encontradas no cache:', versions);
-
-    for (const v of versions) {
-      const candidate = path.join(chromeDir, v, 'chrome-linux64', 'chrome');
-      if (fs.existsSync(candidate)) {
-        console.log(`[WPP] ✅ Chromium encontrado manualmente em: ${candidate}`);
-        return candidate;
-      }
-    }
-  }
-
-  // 5. Se chegou aqui, não tem navegador mesmo
-  throw new Error(
-    `Nenhum navegador Chromium/Chrome disponível em ${cacheDir}. Verifique se o comando "npx puppeteer browsers install chrome" está funcionando no ambiente.`
-  );
 }
 
 /**
- * Inicia uma sessão do WhatsApp usando WPPConnect.
- *
+ * Garante que o Chrome/Chromium do Puppeteer está instalado
+ * e retorna o executablePath válido.
+ */
+function getChromiumExecutable() {
+  const cacheDir = getCacheDir();
+  ensureDir(cacheDir);
+
+  console.log('[WPP] 🔍 Tentando resolver executablePath via puppeteer.executablePath()...');
+  let exePath = '';
+
+  try {
+    exePath = puppeteer.executablePath();
+    console.log(`[WPP] Puppeteer executável sugerido: ${exePath}`);
+  } catch (err) {
+    console.log('[WPP] puppeteer.executablePath() lançou erro:', err.message);
+  }
+
+  // Se o caminho sugerido existe, usa ele
+  if (exePath && fs.existsSync(exePath)) {
+    console.log(`[WPP] ✅ Chromium já existe em: ${exePath}`);
+    return exePath;
+  }
+
+  console.log('[WPP] ⚙️ Chromium não encontrado. Instalando via `npx puppeteer browsers install chrome`...');
+
+  try {
+    execSync('npx puppeteer browsers install chrome', {
+      stdio: 'inherit',
+      env: {
+        ...process.env,
+        PUPPETEER_CACHE_DIR: cacheDir
+      }
+    });
+  } catch (err) {
+    console.error('[WPP] ❌ Falha ao instalar Chrome via Puppeteer:', err.message);
+    throw new Error('Não foi possível instalar o Chrome com puppeteer.');
+  }
+
+  // Depois da instalação, tenta de novo
+  try {
+    exePath = puppeteer.executablePath();
+    console.log(`[WPP] 🔁 Novo executablePath depois da instalação: ${exePath}`);
+  } catch (err) {
+    console.error('[WPP] ❌ puppeteer.executablePath() falhou após instalação:', err.message);
+    throw new Error('Não foi possível obter o caminho do Chrome após instalação.');
+  }
+
+  if (!exePath || !fs.existsSync(exePath)) {
+    console.error('[WPP] ❌ Mesmo após instalação, executablePath não existe:', exePath);
+    throw new Error('Chrome não encontrado mesmo após instalação.');
+  }
+
+  console.log(`[WPP] ✅ Chromium encontrado após instalação.`);
+  console.log(`[WPP] 🚀 Usando executablePath: ${exePath}`);
+  return exePath;
+}
+
+/**
+ * Inicia sessão do WhatsApp com WPPConnect
  * @param {string} instanceId
- * @param {(qrBase64: string) => void} [onQRCode]
- * @param {(status: string) => void} [onStatusChange]
- * @param {(client: any) => void} [onReady]
+ * @param {(base64Qr: string) => void} onQRCode
+ * @param {(status: string) => void} onStatusChange
+ * @param {(client: any) => void} onReady
  */
 export async function startWhatsAppSession(instanceId, onQRCode, onStatusChange, onReady) {
   console.log(`[WPP] Iniciando sessão WhatsApp para instância: ${instanceId}`);
 
-  let executablePath;
   try {
-    executablePath = await ensureChromiumInstalled();
-  } catch (err) {
-    console.error('[WPP] ❌ Não foi possível garantir instalação do Chromium:', err.message);
-    throw new Error(`Falha ao iniciar WPPConnect: ${err.message}`);
-  }
+    const executablePath = getChromiumExecutable();
 
-  console.log(`[WPP] 🚀 Usando executablePath: ${executablePath}`);
-
-  try {
+    console.log('[WPP] Criando cliente WPPConnect...');
     const client = await wppconnect.create({
       session: instanceId,
 
-      // Caminho real do navegador
-      browserPathExecutable: executablePath,
+      // Captura QR code (base64) e envia pro callback
+      catchQR: async (base64Qr, asciiQR, attempts, urlCode) => {
+        try {
+          console.log(`[WPP] ✅ QR CODE GERADO! (tentativa ${attempts})`);
+          console.log(`[WPP] Tamanho do QR base64: ${base64Qr ? base64Qr.length : 0}`);
 
-      browserArgs: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--disable-gpu'
-      ],
+          if (typeof onQRCode === 'function') {
+            await onQRCode(base64Qr);
+          }
+        } catch (err) {
+          console.error('[WPP] ❌ Erro no callback onQRCode:', err);
+        }
+      },
+
+      // Status da sessão
+      statusFind: (statusSession, session) => {
+        console.log(`[WPP] Status da sessão ${session}: ${statusSession}`);
+
+        if (typeof onStatusChange === 'function') {
+          try {
+            onStatusChange(statusSession);
+          } catch (err) {
+            console.error('[WPP] ❌ Erro no callback onStatusChange:', err);
+          }
+        }
+
+        if (statusSession === 'inChat' || statusSession === 'isLogged') {
+          console.log('[WPP] ✅ WhatsApp conectado com sucesso!');
+          if (typeof onReady === 'function') {
+            try {
+              onReady(client);
+            } catch (err) {
+              console.error('[WPP] ❌ Erro no callback onReady:', err);
+            }
+          }
+        }
+
+        if (statusSession === 'qrReadError') {
+          console.warn('[WPP] ❌ Erro ao ler QR Code (qrReadError)');
+        }
+
+        if (statusSession === 'autocloseCalled' || statusSession === 'browserClose') {
+          console.warn('[WPP] ⚠️ Sessão fechada automaticamente ou browser fechado.');
+        }
+      },
+
+      // Configurações gerais
+      logQR: false,           // não imprime QR no terminal
+      disableWelcome: true,   // sem mensagem de boas-vindas
+      updatesLog: false,
+
+      // IMPORTANTE: não fechar automaticamente pra dar tempo do usuário ler o QR
+      autoClose: 0,           // 0 = sem auto close
+      waitForLogin: true,
+      createPathFileToken: true,
 
       puppeteerOptions: {
         executablePath,
@@ -124,46 +161,21 @@ export async function startWhatsAppSession(instanceId, onQRCode, onStatusChange,
           '--disable-accelerated-2d-canvas',
           '--no-first-run',
           '--no-zygote',
-          '--disable-gpu'
+          '--disable-gpu',
+          '--single-process'
         ]
-      },
-
-      catchQR: (base64Qr, asciiQR, attempts, urlCode) => {
-        console.log(`[WPP] ✅ QR CODE GERADO! (tentativa ${attempts})`);
-        if (onQRCode) onQRCode(base64Qr || '');
-      },
-
-      statusFind: (statusSession, session) => {
-        console.log(`[WPP] Status da sessão ${session}: ${statusSession}`);
-
-        if (onStatusChange) onStatusChange(statusSession);
-
-        if (statusSession === 'inChat') {
-          console.log('[WPP] 🎉 WhatsApp conectado com sucesso!');
-          if (onReady) onReady(client);
-        }
-      },
-
-      logQR: false,
-      disableWelcome: true,
-      updatesLog: false,
-      autoClose: 180000,
-      waitForLogin: true,
-      createPathFileToken: true
+      }
     });
 
     console.log(`[WPP] Cliente WPPConnect criado com sucesso para ${instanceId}`);
     return client;
   } catch (err) {
     console.error('[WPP] ❌ Erro ao iniciar sessão WhatsApp:', err);
-    const msg = err?.message || 'Erro desconhecido ao iniciar sessão';
-    throw new Error(`Falha ao iniciar WPPConnect: ${msg}`);
+    const message = err && err.message ? err.message : 'Erro desconhecido ao iniciar sessão';
+    throw new Error(`Falha ao iniciar WPPConnect: ${message}`);
   }
 }
 
-/**
- * Fecha a sessão do WhatsApp.
- */
 export async function closeWhatsAppSession(client) {
   try {
     if (client) {
@@ -175,24 +187,24 @@ export async function closeWhatsAppSession(client) {
   }
 }
 
-/**
- * Obtém o número de telefone do WhatsApp conectado.
- */
 export async function getPhoneNumber(client) {
   try {
     const wid = await client.getWid();
     console.log('[WPP] WID obtido:', wid);
-    const phoneNumber = wid ? wid.user || wid._serialized.split('@')[0] : null;
+
+    const phoneNumber = wid ? (wid.user || (wid._serialized ? wid._serialized.split('@')[0] : null)) : null;
     console.log('[WPP] Número extraído:', phoneNumber);
+
     return phoneNumber;
   } catch (err) {
-    console.error('[WPP] Erro ao obter número (getWid):', err);
+    console.error('[WPP] Erro ao obter número de telefone:', err);
+
     try {
       const hostDevice = await client.getHostDevice();
       console.log('[WPP] Host device:', hostDevice);
       return hostDevice?.id?.user || hostDevice?.wid?.user || null;
     } catch (err2) {
-      console.error('[WPP] Erro no método alternativo (getHostDevice):', err2);
+      console.error('[WPP] Erro no método alternativo getHostDevice:', err2);
       return null;
     }
   }
