@@ -1,18 +1,17 @@
 // 🔹 Função para iniciar sessão do WhatsApp com WPPConnect
 import wppconnect from '@wppconnect-team/wppconnect';
 import puppeteer from 'puppeteer';
+import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
-// Função para obter o caminho do Chromium usando Puppeteer
-function getChromiumPath() {
-  
-  console.log(`[WPP] 🔍 Obtendo caminho do Chromium...`);
-  
-  // Lista de possíveis caminhos para tentar
+// Diretório padrão de cache do Puppeteer no Render
+const DEFAULT_CACHE_DIR = '/opt/render/.cache/puppeteer';
+
+function listChromiumCandidates(cacheDir) {
   const possiblePaths = [];
-  
-  // 1. Tentar obter via Puppeteer
+
+  // 1. Tentar obter via Puppeteer (se já existir localmente)
   try {
     const chromiumPath = puppeteer.executablePath();
     console.log(`[WPP] Puppeteer sugere: ${chromiumPath}`);
@@ -20,31 +19,24 @@ function getChromiumPath() {
   } catch (err) {
     console.log(`[WPP] Puppeteer não retornou caminho:`, err.message);
   }
-  
-  // 2. Adicionar caminhos comuns do Render
-  const cacheDir = process.env.PUPPETEER_CACHE_DIR || '/opt/render/.cache/puppeteer';
-  console.log(`[WPP] PUPPETEER_CACHE_DIR: ${cacheDir}`);
-  
-  // Tentar encontrar Chrome no cache dir
-  if (fs.existsSync(cacheDir)) {
+
+  // 2. Caminhos presentes no cache configurado
+  const chromeDir = path.join(cacheDir, 'chrome');
+  if (fs.existsSync(chromeDir)) {
     try {
-      const chromeDir = path.join(cacheDir, 'chrome');
-      if (fs.existsSync(chromeDir)) {
-        const versions = fs.readdirSync(chromeDir);
-        console.log(`[WPP] Versões encontradas no cache:`, versions);
-        
-        // Adiciona todas as versões encontradas
-        versions.forEach(version => {
-          const chromePath = path.join(chromeDir, version, 'chrome-linux64', 'chrome');
-          possiblePaths.push(chromePath);
-        });
-      }
+      const versions = fs.readdirSync(chromeDir);
+      console.log(`[WPP] Versões encontradas no cache:`, versions);
+
+      versions.forEach(version => {
+        const chromePath = path.join(chromeDir, version, 'chrome-linux64', 'chrome');
+        possiblePaths.push(chromePath);
+      });
     } catch (err) {
       console.log(`[WPP] Erro ao listar versões:`, err.message);
     }
   }
-  
-  // 3. Adicionar fallbacks específicos conhecidos
+
+  // 3. Fallbacks conhecidos
   possiblePaths.push(
     '/opt/render/.cache/puppeteer/chrome/linux-143.0.7499.40/chrome-linux64/chrome',
     '/opt/render/.cache/puppeteer/chrome/linux-131.0.6778.204/chrome-linux64/chrome',
@@ -52,9 +44,35 @@ function getChromiumPath() {
     '/usr/bin/chromium',
     '/usr/bin/google-chrome'
   );
-  
-  // Tentar cada caminho
+
+  return possiblePaths;
+}
+
+function ensureChromiumInstalled(cacheDir) {
+  console.log(`[WPP] ⚙️ Instalando Chrome via Puppeteer no cache ${cacheDir}...`);
+  try {
+    execSync('npx puppeteer browsers install chrome', {
+      stdio: 'inherit',
+      env: { ...process.env, PUPPETEER_CACHE_DIR: cacheDir }
+    });
+    console.log(`[WPP] ✅ Instalação concluída`);
+  } catch (err) {
+    console.error(`[WPP] ❌ Falha ao instalar Chrome: ${err.message}`);
+  }
+}
+
+// Função para obter o caminho do Chromium usando Puppeteer
+function getChromiumPath() {
+
+  console.log(`[WPP] 🔍 Obtendo caminho do Chromium...`);
+
+  // Usa cache configurado ou padrão do Render
+  const cacheDir = process.env.PUPPETEER_CACHE_DIR || DEFAULT_CACHE_DIR;
+  console.log(`[WPP] PUPPETEER_CACHE_DIR: ${cacheDir}`);
+
+  const possiblePaths = listChromiumCandidates(cacheDir);
   console.log(`[WPP] Tentando ${possiblePaths.length} possíveis caminhos...`);
+
   for (const chromePath of possiblePaths) {
     if (fs.existsSync(chromePath)) {
       console.log(`[WPP] ✅ Chromium encontrado: ${chromePath}`);
@@ -63,12 +81,21 @@ function getChromiumPath() {
       console.log(`[WPP] ❌ Não existe: ${chromePath}`);
     }
   }
-  
-  // Se nenhum caminho funcionou, retorna o primeiro da lista como último recurso
-  const fallback = possiblePaths[0] || '/usr/bin/chromium-browser';
-  console.error(`[WPP] ⚠️ NENHUM Chromium encontrado! Usando fallback: ${fallback}`);
-  console.error(`[WPP] ⚠️ Isso provavelmente falhará. Execute: npx puppeteer browsers install chrome`);
-  return fallback;
+
+  // Se nenhum foi encontrado, tenta instalar e procurar novamente
+  ensureChromiumInstalled(cacheDir);
+
+  const pathsAfterInstall = listChromiumCandidates(cacheDir);
+  console.log(`[WPP] Reavaliando ${pathsAfterInstall.length} caminhos após instalação...`);
+  for (const chromePath of pathsAfterInstall) {
+    if (fs.existsSync(chromePath)) {
+      console.log(`[WPP] ✅ Chromium encontrado após instalação: ${chromePath}`);
+      return chromePath;
+    }
+  }
+
+  // Se ainda assim não encontrar, lança erro claro
+  throw new Error('Nenhum navegador Chromium/Chrome disponível após tentativa de instalação.');
 }
 
 export async function startWhatsAppSession(instanceId, onQRCode, onStatusChange, onReady) {
