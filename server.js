@@ -592,7 +592,7 @@ wss.on('connection', (ws, req) => {
 
   // Adiciona cliente à lista da instância
   if (!activeSessions.has(instanceId)) {
-    activeSessions.set(instanceId, { sock: null, clients: new Set() });
+    activeSessions.set(instanceId, { client: null, clients: new Set() });
   }
   
   const session = activeSessions.get(instanceId);
@@ -615,10 +615,10 @@ wss.on('connection', (ws, req) => {
   }, 30000);
   
   // Envia status atual da sessão
-  if (session.sock?.user) {
+  if (session.client?.user) {
     // Já conectado
     ws.send(JSON.stringify({ type: 'status', data: 'connected' }));
-  } else if (session.sock) {
+  } else if (session.client) {
     // Conectando
     ws.send(JSON.stringify({ type: 'status', data: 'connecting' }));
   } else {
@@ -635,7 +635,7 @@ wss.on('connection', (ws, req) => {
         console.log(`[WS] Cliente solicitou início de sessão para ${instanceId}`);
         
         // Verifica se já existe sessão ativa
-        if (session.sock) {
+        if (session.client) {
           console.log(`[WS] Sessão já existe para ${instanceId}`);
           ws.send(JSON.stringify({ type: 'error', data: 'Sessão já está ativa' }));
           return;
@@ -655,14 +655,17 @@ wss.on('connection', (ws, req) => {
     session.clients.delete(ws);
     
     // Se não há mais clientes e não está conectado, limpa a sessão
-    if (session.clients.size === 0 && !session.sock?.user) {
-      // Mantém a sessão por 2 minutos antes de limpar
-      setTimeout(() => {
-        if (session.clients.size === 0 && !session.sock?.user) {
+    if (session.clients.size === 0 && !session.client?.user) {
+      // Mantém a sessão por 5 minutos antes de limpar
+      const timeoutId = setTimeout(() => {
+        const currentSession = activeSessions.get(instanceId);
+        if (currentSession && currentSession.clients.size === 0 && !currentSession.client?.user) {
           console.log(`[WS] Limpando sessão inativa: ${instanceId}`);
           activeSessions.delete(instanceId);
         }
       }, 5 * 60 * 1000);
+      // Armazena o timeout para poder cancelar se necessário
+      session.cleanupTimeout = timeoutId;
     }
   });
 
