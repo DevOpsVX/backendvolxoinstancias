@@ -4,9 +4,7 @@
   "description": "Backend API for Volxo WhatsApp Connection",
   "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "build": "npm install",
-    "postinstall": "export PUPPETEER_CACHE_DIR=/opt/render/.cache/puppeteer && npx puppeteer browsers install chrome"
+    "start": "node server.js"
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
