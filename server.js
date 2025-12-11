@@ -656,10 +656,23 @@ wss.on('connection', (ws, req) => {
           console.log(`[WS] Cliente armazenado com sucesso para ${instanceId}`);
         } catch (err) {
           console.error(`[WS] Erro ao iniciar sessão:`, err);
+          console.error(`[WS] Stack:`, err.stack);
+          
+          // Envia mensagem de erro mais detalhada
+          const errorMsg = err.message || 'Erro desconhecido';
           ws.send(JSON.stringify({ 
             type: 'error', 
-            data: 'Erro ao iniciar sessão WhatsApp. Tente novamente.' 
+            data: `Erro ao iniciar sessão WhatsApp: ${errorMsg}`,
+            details: err.message
           }));
+          
+          // Notifica status de desconectado
+          broadcastToInstance(instanceId, { 
+            type: 'status', 
+            data: 'disconnected',
+            reason: 'initialization_error',
+            message: errorMsg
+          });
         }
       }
     } catch (err) {

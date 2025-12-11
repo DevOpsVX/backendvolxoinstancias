@@ -8,12 +8,23 @@ function getChromiumPath() {
     console.log(`[WPP] 🔍 Obtendo caminho do Chromium via Puppeteer...`);
     const chromiumPath = puppeteer.executablePath();
     console.log(`[WPP] ✅ Chromium encontrado: ${chromiumPath}`);
-    return chromiumPath;
+    
+    // Verifica se o arquivo existe
+    const fs = require('fs');
+    if (fs.existsSync(chromiumPath)) {
+      console.log(`[WPP] ✅ Chromium verificado e acessível`);
+      return chromiumPath;
+    } else {
+      console.error(`[WPP] ❌ Chromium não encontrado no caminho: ${chromiumPath}`);
+      throw new Error(`Chromium não encontrado em ${chromiumPath}`);
+    }
   } catch (err) {
-    console.error(`[WPP] ❌ Erro ao obter caminho do Chromium:`, err);
+    console.error(`[WPP] ❌ Erro ao obter caminho do Chromium:`, err.message);
     console.log(`[WPP] ⚠️ Tentando usar caminho padrão...`);
     // Fallback para caminho padrão do Render
-    return '/opt/render/.cache/puppeteer/chrome/linux-131.0.6778.204/chrome-linux64/chrome';
+    const fallbackPath = '/opt/render/.cache/puppeteer/chrome/linux-131.0.6778.204/chrome-linux64/chrome';
+    console.log(`[WPP] Tentando fallback: ${fallbackPath}`);
+    return fallbackPath;
   }
 }
 
@@ -21,6 +32,11 @@ export async function startWhatsAppSession(instanceId, onQRCode, onStatusChange,
   console.log(`[WPP] Iniciando sessão WhatsApp para instância: ${instanceId}`);
   
   try {
+    console.log(`[WPP] Obtendo caminho do Chromium...`);
+    const chromiumPath = getChromiumPath();
+    console.log(`[WPP] Chromium path: ${chromiumPath}`);
+    
+    console.log(`[WPP] Criando cliente WPPConnect...`);
     const client = await wppconnect.create({
       session: instanceId,
       catchQR: (base64Qr, asciiQR, attempts, urlCode) => {
@@ -54,7 +70,7 @@ export async function startWhatsAppSession(instanceId, onQRCode, onStatusChange,
       waitForLogin: true, // Aguarda login antes de continuar
       createPathFileToken: true, // Cria diretório de tokens automaticamente
       // WPPConnect usa browserPathExecutable ao invés de executablePath
-      browserPathExecutable: getChromiumPath(),
+      browserPathExecutable: chromiumPath,
       browserArgs: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -72,7 +88,12 @@ export async function startWhatsAppSession(instanceId, onQRCode, onStatusChange,
     
   } catch (err) {
     console.error(`[WPP] ❌ Erro ao iniciar sessão WhatsApp:`, err);
-    throw err;
+    console.error(`[WPP] Stack trace:`, err.stack);
+    console.error(`[WPP] Mensagem de erro:`, err.message);
+    
+    // Lança erro com mais contexto
+    const errorMessage = err.message || 'Erro desconhecido ao iniciar sessão';
+    throw new Error(`Falha ao iniciar WPPConnect: ${errorMessage}`);
   }
 }
 
