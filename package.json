@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "build": "npm install",
-    "postinstall": "PUPPETEER_CACHE_DIR=/opt/render/.cache/puppeteer npx puppeteer browsers install chrome && echo '=== Chrome instalado com sucesso ===' || echo '=== Falha ao instalar Chrome ==='"
+    "postinstall": "node -e \"process.env.PUPPETEER_CACHE_DIR='/opt/render/.cache/puppeteer'; require('child_process').execSync('npx puppeteer browsers install chrome', {stdio: 'inherit'})\" && echo '=== Chrome instalado com sucesso ===' || echo '=== Falha ao instalar Chrome ==='"
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
