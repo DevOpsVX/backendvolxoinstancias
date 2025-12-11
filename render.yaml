@@ -2,8 +2,12 @@ services:
   - type: web
     name: backendvolxoinstancias
     env: node
-    buildCommand: npm run build
+    buildCommand: ./render-build.sh
     startCommand: npm start
     envVars:
       - key: NODE_VERSION
         value: 18.17.0
+      - key: PUPPETEER_CACHE_DIR
+        value: /opt/render/.cache/puppeteer
+      - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
+        value: false
