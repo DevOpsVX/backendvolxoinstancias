@@ -1,11 +1,11 @@
 // 🔹 Função para iniciar sessão do WhatsApp com WPPConnect
 import wppconnect from '@wppconnect-team/wppconnect';
 import puppeteer from 'puppeteer';
+import fs from 'fs';
+import path from 'path';
 
 // Função para obter o caminho do Chromium usando Puppeteer
 function getChromiumPath() {
-  const fs = require('fs');
-  const path = require('path');
   
   console.log(`[WPP] 🔍 Obtendo caminho do Chromium...`);
   
