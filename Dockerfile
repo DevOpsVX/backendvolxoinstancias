@@ -1,30 +1,45 @@
-# Use Node.js 22 (versão mais recente e compatível com o projeto)
+# Use Node.js 22 LTS
 FROM node:22-slim
 
-# Instalar dependências do Chromium
+# Instalar dependências necessárias para Chromium/Puppeteer
 RUN apt-get update && apt-get install -y \
-    chromium \
-    chromium-sandbox \
+    wget \
+    ca-certificates \
     fonts-liberation \
+    libappindicator3-1 \
     libasound2 \
     libatk-bridge2.0-0 \
     libatk1.0-0 \
-    libatspi2.0-0 \
+    libc6 \
+    libcairo2 \
     libcups2 \
     libdbus-1-3 \
-    libdrm2 \
+    libexpat1 \
+    libfontconfig1 \
     libgbm1 \
+    libgcc1 \
+    libglib2.0-0 \
     libgtk-3-0 \
     libnspr4 \
     libnss3 \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    libstdc++6 \
+    libx11-6 \
     libx11-xcb1 \
+    libxcb1 \
     libxcomposite1 \
+    libxcursor1 \
     libxdamage1 \
+    libxext6 \
     libxfixes3 \
-    libxkbcommon0 \
+    libxi6 \
     libxrandr2 \
+    libxrender1 \
+    libxss1 \
+    libxtst6 \
+    lsb-release \
     xdg-utils \
-    ca-certificates \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
@@ -35,19 +50,10 @@ WORKDIR /app
 COPY package*.json ./
 
 # Instalar dependências do Node.js
-RUN npm install
+RUN npm ci --only=production
 
 # Copiar código da aplicação
 COPY . .
-
-# Configurar Puppeteer para usar Chromium do sistema
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
-ENV PUPPETEER_CACHE_DIR=/app/.cache/puppeteer
-
-# Criar diretório de cache e instalar Chrome via Puppeteer como backup
-RUN mkdir -p $PUPPETEER_CACHE_DIR && \
-    npx puppeteer browsers install chrome || echo 'Puppeteer install failed, using system chromium'
 
 # Expor porta (Render usa variável PORT)
 EXPOSE 10000
