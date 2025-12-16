@@ -20,6 +20,7 @@ echo "🔍 Verificando instalação do Chrome..."
 # Lista de caminhos possíveis (prioriza cache dentro do projeto)
 CHROME_PATHS=(
     "/app/.puppeteer-cache/chrome/linux-*/chrome-linux64/chrome"
+    "/app/puppeteer-cache/chrome/linux-*/chrome-linux64/chrome"  # Sem ponto (fallback)
     "/app/.cache/puppeteer/chrome/linux-*/chrome-linux64/chrome"
     "/opt/render/project/src/.puppeteer-cache/chrome/linux-*/chrome-linux64/chrome"
     "/opt/render/.cache/puppeteer/chrome/linux-*/chrome-linux64/chrome"

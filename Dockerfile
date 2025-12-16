@@ -57,9 +57,12 @@ RUN npm ci --only=production
 # Cache DENTRO do projeto para ir junto no deploy do Render
 ENV PUPPETEER_CACHE_DIR=/app/.puppeteer-cache
 RUN mkdir -p $PUPPETEER_CACHE_DIR && \
+    echo "📦 Instalando Chrome via Puppeteer..." && \
     npx puppeteer browsers install chrome && \
     echo "✅ Chrome instalado via Puppeteer" && \
-    ls -la $PUPPETEER_CACHE_DIR
+    echo "📁 Verificando instalação:" && \
+    find /app -name "chrome" -type f 2>/dev/null | head -5 && \
+    ls -la $PUPPETEER_CACHE_DIR || echo "⚠️  Cache dir não encontrado"
 
 # Copiar código da aplicação
 COPY . .
