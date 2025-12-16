@@ -1,8 +1,6 @@
 services:
   - type: web
     name: backendvolxoinstancias
-    env: docker
-    dockerfilePath: ./Dockerfile
-    envVars:
-      - key: PUPPETEER_CACHE_DIR
-        value: /app/.puppeteer-cache
+    runtime: node
+    buildCommand: npm install && npx puppeteer browsers install chrome
+    startCommand: bash start.sh
