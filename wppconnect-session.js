@@ -28,9 +28,26 @@ function getChromiumExecutable() {
   const cacheDir = getCacheDir();
   ensureDir(cacheDir);
 
-  console.log('[WPP] 🔍 Tentando resolver executablePath via puppeteer.executablePath()...');
-  let exePath = '';
+  // PRIORIDADE 1: Usar Chromium do sistema (instalado via apt-get no Docker)
+  const systemChromiumPaths = [
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable'
+  ];
 
+  console.log('[WPP] 🔍 Verificando Chromium do sistema...');
+  for (const chromePath of systemChromiumPaths) {
+    if (fs.existsSync(chromePath)) {
+      console.log(`[WPP] ✅ Chromium do sistema encontrado: ${chromePath}`);
+      return chromePath;
+    }
+  }
+
+  console.log('[WPP] ⚠️ Chromium do sistema não encontrado, tentando Puppeteer...');
+  
+  // PRIORIDADE 2: Usar Puppeteer executablePath
+  let exePath = '';
   try {
     exePath = puppeteer.executablePath();
     console.log(`[WPP] Puppeteer executável sugerido: ${exePath}`);
@@ -40,7 +57,7 @@ function getChromiumExecutable() {
 
   // Se o caminho sugerido existe, usa ele
   if (exePath && fs.existsSync(exePath)) {
-    console.log(`[WPP] ✅ Chromium já existe em: ${exePath}`);
+    console.log(`[WPP] ✅ Chromium do Puppeteer já existe em: ${exePath}`);
     return exePath;
   }
 

@@ -1,5 +1,5 @@
-# Use Node.js 18 (versão configurada no render.yaml)
-FROM node:18-slim
+# Use Node.js 22 (versão mais recente e compatível com o projeto)
+FROM node:22-slim
 
 # Instalar dependências do Chromium
 RUN apt-get update && apt-get install -y \
@@ -40,9 +40,14 @@ RUN npm install
 # Copiar código da aplicação
 COPY . .
 
-# Instalar Chrome via Puppeteer
+# Configurar Puppeteer para usar Chromium do sistema
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV PUPPETEER_CACHE_DIR=/app/.cache/puppeteer
-RUN mkdir -p $PUPPETEER_CACHE_DIR && npx puppeteer browsers install chrome
+
+# Criar diretório de cache e instalar Chrome via Puppeteer como backup
+RUN mkdir -p $PUPPETEER_CACHE_DIR && \
+    npx puppeteer browsers install chrome || echo 'Puppeteer install failed, using system chromium'
 
 # Expor porta (Render usa variável PORT)
 EXPOSE 10000
