@@ -51,11 +51,25 @@ export async function startWhatsAppSession(instanceId, onQRCode, onStatusChange,
       },
 
       // Callback de mudança de status
-      statusFind: (statusSession, session) => {
+      statusFind: async (statusSession, session) => {
         console.log(`[WPP] Status da sessão ${session}: ${statusSession}`);
         
         if (onStatusChange) {
           onStatusChange(statusSession);
+        }
+
+        // Se sessão conectou com sucesso
+        if (statusSession === 'inChat' || statusSession === 'isLogged' || statusSession === 'qrReadSuccess') {
+          console.log(`[WPP] ✅ Sessão conectada! Executando callback onReady...`);
+          if (onReady) {
+            try {
+              // Aguarda um pouco para garantir que o cliente está pronto
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              await onReady(client);
+            } catch (err) {
+              console.error('[WPP] Erro no callback onReady:', err);
+            }
+          }
         }
 
         // Se sessão foi fechada
@@ -78,6 +92,20 @@ export async function startWhatsAppSession(instanceId, onQRCode, onStatusChange,
           '--no-zygote',
           '--disable-gpu',
           '--single-process', // Importante para Render (pouca memória)
+          '--disable-background-timer-throttling',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-renderer-backgrounding',
+          '--disable-features=TranslateUI',
+          '--disable-ipc-flooding-protection',
+          '--disable-hang-monitor',
+          '--disable-prompt-on-repost',
+          '--disable-sync',
+          '--disable-extensions',
+          '--disable-plugins',
+          '--disable-images', // Desabilita imagens para economizar memória
+          '--blink-settings=imagesEnabled=false',
+          '--disable-web-security',
+          '--disable-features=IsolateOrigins,site-per-process',
         ],
       },
 
@@ -88,14 +116,10 @@ export async function startWhatsAppSession(instanceId, onQRCode, onStatusChange,
     });
 
     console.log('[WPP] ✅ Cliente WPPConnect criado com sucesso!');
+    console.log('[WPP] Aguardando conexão... (callback onReady será executado quando status = inChat)');
 
-    // Aguarda cliente estar pronto
-    await client.isConnected();
-    console.log('[WPP] ✅ Cliente conectado ao WhatsApp!');
-
-    if (onReady) {
-      await onReady(client);
-    }
+    // NÃO aguarda isConnected() aqui pois isso bloqueia
+    // O callback onReady será executado via statusFind quando status = 'inChat'
 
     return client;
 
