@@ -67,5 +67,9 @@ COPY . .
 # Expor porta (Render usa variável PORT)
 EXPOSE 10000
 
-# Comando para iniciar o servidor
-CMD ["npm", "start"]
+# Copiar script de inicialização
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
+
+# Comando para iniciar o servidor via script
+CMD ["/app/start.sh"]
