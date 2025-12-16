@@ -4,26 +4,38 @@ echo "========================================="
 echo "🚀 Iniciando Backend Volxo Instâncias"
 echo "========================================="
 
-# Função para verificar se Chrome existe
+# Detectar ambiente automaticamente
+if [ -d "/app" ] && [ -w "/app" ]; then
+    # Ambiente Docker
+    BASE_DIR="/app"
+    echo "🐳 Ambiente: Docker"
+else
+    # Ambiente Render nativo
+    BASE_DIR="/opt/render/project/src"
+    echo "☁️  Ambiente: Render (Node.js nativo)"
+fi
+
+echo "📁 Diretório base: $BASE_DIR"
+
+# Configurar cache do Puppeteer
+export PUPPETEER_CACHE_DIR="${BASE_DIR}/.puppeteer-cache"
+echo "📦 Cache do Puppeteer: $PUPPETEER_CACHE_DIR"
+
+# Função para verificar se Chrome é executável
 check_chrome() {
     local chrome_path="$1"
-    if [ -f "$chrome_path" ]; then
-        echo "✅ Chrome encontrado em: $chrome_path"
+    if [ -f "$chrome_path" ] && [ -x "$chrome_path" ]; then
         return 0
     fi
     return 1
 }
 
-# Verificar se Chrome já está instalado
 echo "🔍 Verificando instalação do Chrome..."
 
-# Lista de caminhos possíveis (prioriza cache dentro do projeto)
+# Caminhos possíveis do Chrome (adaptados ao ambiente)
 CHROME_PATHS=(
-    "/app/.puppeteer-cache/chrome/linux-*/chrome-linux64/chrome"
-    "/app/puppeteer-cache/chrome/linux-*/chrome-linux64/chrome"  # Sem ponto (fallback)
-    "/app/.cache/puppeteer/chrome/linux-*/chrome-linux64/chrome"
-    "/opt/render/project/src/.puppeteer-cache/chrome/linux-*/chrome-linux64/chrome"
-    "/opt/render/.cache/puppeteer/chrome/linux-*/chrome-linux64/chrome"
+    "${BASE_DIR}/.puppeteer-cache/chrome/linux-*/chrome-linux64/chrome"
+    "${BASE_DIR}/puppeteer-cache/chrome/linux-*/chrome-linux64/chrome"
     "/usr/bin/chromium"
     "/usr/bin/chromium-browser"
     "/usr/bin/google-chrome"
@@ -31,10 +43,12 @@ CHROME_PATHS=(
 )
 
 CHROME_FOUND=false
+
+# Procurar Chrome nos caminhos possíveis
 for path_pattern in "${CHROME_PATHS[@]}"; do
-    # Expandir glob pattern
     for path in $path_pattern; do
         if check_chrome "$path"; then
+            echo "✅ Chrome encontrado em: $path"
             export PUPPETEER_EXECUTABLE_PATH="$path"
             CHROME_FOUND=true
             break 2
@@ -46,11 +60,9 @@ done
 if [ "$CHROME_FOUND" = false ]; then
     echo "⚠️  Chrome não encontrado. Instalando..."
     
-    # Definir diretório de cache (dentro do projeto para persistir no deploy)
-    export PUPPETEER_CACHE_DIR="${PUPPETEER_CACHE_DIR:-/app/.puppeteer-cache}"
+    # Criar diretório de cache
     mkdir -p "$PUPPETEER_CACHE_DIR"
     
-    echo "📦 Cache do Puppeteer: $PUPPETEER_CACHE_DIR"
     echo "🔽 Baixando Chrome via Puppeteer..."
     
     # Tentar instalar Chrome
@@ -74,10 +86,8 @@ fi
 
 # Verificar resultado final
 if [ "$CHROME_FOUND" = true ]; then
-    echo "========================================="
     echo "✅ Chrome configurado!"
-    echo "📍 Path: $PUPPETEER_EXECUTABLE_PATH"
-    echo "========================================="
+    echo "📍 Caminho: $PUPPETEER_EXECUTABLE_PATH"
 else
     echo "========================================="
     echo "❌ ERRO: Chrome não pôde ser instalado"
@@ -86,8 +96,8 @@ else
     echo "⚠️  Verifique os logs para mais detalhes."
 fi
 
-# Iniciar servidor Node.js
-echo ""
 echo "🚀 Iniciando servidor Node.js..."
 echo "========================================="
+
+# Iniciar servidor
 exec node server.js
