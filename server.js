@@ -639,21 +639,37 @@ wss.on('connection', (ws, req) => {
       const message = JSON.parse(data.toString());
       
       if (message.type === 'start') {
+        console.log(`[WS] ========== COMANDO START RECEBIDO ==========`);
         console.log(`[WS] Cliente solicitou início de sessão para ${instanceId}`);
+        console.log(`[WS] session.client existe?`, !!session.client);
+        console.log(`[WS] session.client.user existe?`, !!session.client?.user);
         
-        // Verifica se já existe sessão ativa
-        if (session.client) {
-          console.log(`[WS] Sessão já existe para ${instanceId}`);
-          ws.send(JSON.stringify({ type: 'error', data: 'Sessão já está ativa' }));
+        // Verifica se já existe sessão REALMENTE ativa (conectada ao WhatsApp)
+        if (session.client && session.client.user) {
+          console.log(`[WS] ⚠️ Sessão já está conectada para ${instanceId}`);
+          ws.send(JSON.stringify({ type: 'error', data: 'Sessão já está ativa e conectada' }));
           return;
         }
         
+        // Se session.client existe mas não está conectado, limpa antes de iniciar nova sessão
+        if (session.client && !session.client.user) {
+          console.log(`[WS] 🧹 Limpando sessão antiga desconectada para ${instanceId}`);
+          try {
+            await closeWhatsAppSession(session.client);
+          } catch (err) {
+            console.log(`[WS] Erro ao fechar sessão antiga (ignorando):`, err.message);
+          }
+          session.client = null;
+        }
+        
         // Inicia nova sessão e armazena o cliente retornado
+        console.log(`[WS] 🚀 Iniciando nova sessão WhatsApp para ${instanceId}...`);
         try {
           const client = await startWhatsAppSession(instanceId);
           // Atualiza a referência da sessão para garantir que o cliente seja armazenado
           session.client = client;
-          console.log(`[WS] Cliente armazenado com sucesso para ${instanceId}`);
+          console.log(`[WS] ✅ Cliente WPPConnect armazenado com sucesso para ${instanceId}`);
+          console.log(`[WS] Cliente tem user?`, !!client?.user);
         } catch (err) {
           console.error(`[WS] Erro ao iniciar sessão:`, err);
           console.error(`[WS] Stack:`, err.stack);
