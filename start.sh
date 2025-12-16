@@ -17,9 +17,11 @@ check_chrome() {
 # Verificar se Chrome já está instalado
 echo "🔍 Verificando instalação do Chrome..."
 
-# Lista de caminhos possíveis
+# Lista de caminhos possíveis (prioriza cache dentro do projeto)
 CHROME_PATHS=(
+    "/app/.puppeteer-cache/chrome/linux-*/chrome-linux64/chrome"
     "/app/.cache/puppeteer/chrome/linux-*/chrome-linux64/chrome"
+    "/opt/render/project/src/.puppeteer-cache/chrome/linux-*/chrome-linux64/chrome"
     "/opt/render/.cache/puppeteer/chrome/linux-*/chrome-linux64/chrome"
     "/usr/bin/chromium"
     "/usr/bin/chromium-browser"
@@ -43,8 +45,8 @@ done
 if [ "$CHROME_FOUND" = false ]; then
     echo "⚠️  Chrome não encontrado. Instalando..."
     
-    # Definir diretório de cache
-    export PUPPETEER_CACHE_DIR="${PUPPETEER_CACHE_DIR:-/app/.cache/puppeteer}"
+    # Definir diretório de cache (dentro do projeto para persistir no deploy)
+    export PUPPETEER_CACHE_DIR="${PUPPETEER_CACHE_DIR:-/app/.puppeteer-cache}"
     mkdir -p "$PUPPETEER_CACHE_DIR"
     
     echo "📦 Cache do Puppeteer: $PUPPETEER_CACHE_DIR"

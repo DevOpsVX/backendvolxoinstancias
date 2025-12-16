@@ -1,5 +1,6 @@
 // wppconnect-session.js
 import wppconnect from '@wppconnect-team/wppconnect';
+import puppeteer from 'puppeteer';
 
 /**
  * Inicia sessão do WhatsApp com WPPConnect
@@ -12,9 +13,17 @@ export async function startWhatsAppSession(instanceId, onQRCode, onStatusChange,
   console.log(`[WPP] Iniciando sessão WhatsApp para instância: ${instanceId}`);
 
   try {
-    const execPath = process.env.PUPPETEER_EXECUTABLE_PATH || 'auto-detect';
+    // Obtém executablePath: env var > puppeteer.executablePath() > undefined
+    let execPath;
+    try {
+      execPath = process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath();
+    } catch (err) {
+      console.log('[WPP] ⚠️ puppeteer.executablePath() falhou:', err.message);
+      execPath = undefined; // Deixa WPPConnect decidir
+    }
+    
     console.log('[WPP] Criando cliente WPPConnect com configuração simplificada...');
-    console.log(`[WPP] Puppeteer executablePath: ${execPath}`);
+    console.log(`[WPP] Puppeteer executablePath: ${execPath || 'auto-detect'}`);
     console.log(`[WPP] PUPPETEER_CACHE_DIR: ${process.env.PUPPETEER_CACHE_DIR || 'not set'}`);
     
     const client = await wppconnect.create({
@@ -51,8 +60,8 @@ export async function startWhatsAppSession(instanceId, onQRCode, onStatusChange,
       // Configurações do Puppeteer
       puppeteerOptions: {
         headless: true,
-        // Usa variável de ambiente ou deixa Puppeteer decidir
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+        // Usa execPath calculado (env var > puppeteer.executablePath() > undefined)
+        executablePath: execPath,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',

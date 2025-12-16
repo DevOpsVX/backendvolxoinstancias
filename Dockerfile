@@ -54,8 +54,8 @@ COPY package*.json ./
 RUN npm ci --only=production
 
 # IMPORTANTE: Instalar Chrome via Puppeteer ANTES de copiar o código
-# Isso garante que o Chrome esteja disponível quando o app iniciar
-ENV PUPPETEER_CACHE_DIR=/app/.cache/puppeteer
+# Cache DENTRO do projeto para ir junto no deploy do Render
+ENV PUPPETEER_CACHE_DIR=/app/.puppeteer-cache
 RUN mkdir -p $PUPPETEER_CACHE_DIR && \
     npx puppeteer browsers install chrome && \
     echo "✅ Chrome instalado via Puppeteer" && \
