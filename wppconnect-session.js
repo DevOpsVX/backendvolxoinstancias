@@ -28,6 +28,9 @@ export async function startWhatsAppSession(instanceId, onQRCode, onStatusChange,
     
     const client = await wppconnect.create({
       session: instanceId,
+      
+      // Timeout de 5 minutos (300 segundos) para escanear QR code
+      autoClose: 300000, // 300 segundos = 5 minutos
 
       // Captura QR code (base64) e envia pro callback
       catchQR: async (base64Qr, asciiQR, attempts, urlCode) => {
