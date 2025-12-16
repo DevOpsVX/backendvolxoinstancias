@@ -157,10 +157,74 @@ export async function closeWhatsAppSession(client) {
  */
 export async function getPhoneNumber(client) {
   try {
-    const hostDevice = await client.getHostDevice();
-    const phoneNumber = hostDevice.id.user || hostDevice.wid?.user || 'unknown';
-    console.log(`[WPP] Número obtido: ${phoneNumber}`);
-    return phoneNumber;
+    console.log('[WPP] Tentando obter número de telefone...');
+    
+    // Método 1: getHostDevice()
+    try {
+      const hostDevice = await client.getHostDevice();
+      console.log('[WPP] hostDevice:', JSON.stringify(hostDevice, null, 2));
+      
+      if (hostDevice?.id?.user) {
+        const phoneNumber = hostDevice.id.user;
+        console.log(`[WPP] ✅ Número obtido via hostDevice.id.user: ${phoneNumber}`);
+        return phoneNumber;
+      }
+      
+      if (hostDevice?.wid?.user) {
+        const phoneNumber = hostDevice.wid.user;
+        console.log(`[WPP] ✅ Número obtido via hostDevice.wid.user: ${phoneNumber}`);
+        return phoneNumber;
+      }
+      
+      if (hostDevice?.id?._serialized) {
+        const phoneNumber = hostDevice.id._serialized.split('@')[0];
+        console.log(`[WPP] ✅ Número obtido via hostDevice.id._serialized: ${phoneNumber}`);
+        return phoneNumber;
+      }
+    } catch (err) {
+      console.log('[WPP] Método 1 (getHostDevice) falhou:', err.message);
+    }
+    
+    // Método 2: getWid()
+    try {
+      const wid = await client.getWid();
+      console.log('[WPP] wid:', JSON.stringify(wid, null, 2));
+      
+      if (wid?.user) {
+        const phoneNumber = wid.user;
+        console.log(`[WPP] ✅ Número obtido via wid.user: ${phoneNumber}`);
+        return phoneNumber;
+      }
+      
+      if (wid?._serialized) {
+        const phoneNumber = wid._serialized.split('@')[0];
+        console.log(`[WPP] ✅ Número obtido via wid._serialized: ${phoneNumber}`);
+        return phoneNumber;
+      }
+    } catch (err) {
+      console.log('[WPP] Método 2 (getWid) falhou:', err.message);
+    }
+    
+    // Método 3: info.wid
+    try {
+      if (client.info?.wid?.user) {
+        const phoneNumber = client.info.wid.user;
+        console.log(`[WPP] ✅ Número obtido via client.info.wid.user: ${phoneNumber}`);
+        return phoneNumber;
+      }
+      
+      if (client.info?.wid?._serialized) {
+        const phoneNumber = client.info.wid._serialized.split('@')[0];
+        console.log(`[WPP] ✅ Número obtido via client.info.wid._serialized: ${phoneNumber}`);
+        return phoneNumber;
+      }
+    } catch (err) {
+      console.log('[WPP] Método 3 (client.info) falhou:', err.message);
+    }
+    
+    console.log('[WPP] ⚠️ Nenhum método conseguiu obter o número');
+    return 'unknown';
+    
   } catch (err) {
     console.error('[WPP] Erro ao obter número:', err);
     return 'unknown';
