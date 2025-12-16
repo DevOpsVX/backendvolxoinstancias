@@ -4,6 +4,7 @@ FROM node:22-slim
 # Instalar dependências necessárias para Chromium/Puppeteer
 RUN apt-get update && apt-get install -y \
     wget \
+    gnupg \
     ca-certificates \
     fonts-liberation \
     libappindicator3-1 \
@@ -51,6 +52,14 @@ COPY package*.json ./
 
 # Instalar dependências do Node.js
 RUN npm ci --only=production
+
+# IMPORTANTE: Instalar Chrome via Puppeteer ANTES de copiar o código
+# Isso garante que o Chrome esteja disponível quando o app iniciar
+ENV PUPPETEER_CACHE_DIR=/app/.cache/puppeteer
+RUN mkdir -p $PUPPETEER_CACHE_DIR && \
+    npx puppeteer browsers install chrome && \
+    echo "✅ Chrome instalado via Puppeteer" && \
+    ls -la $PUPPETEER_CACHE_DIR
 
 # Copiar código da aplicação
 COPY . .

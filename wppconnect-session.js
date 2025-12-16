@@ -12,7 +12,10 @@ export async function startWhatsAppSession(instanceId, onQRCode, onStatusChange,
   console.log(`[WPP] Iniciando sessão WhatsApp para instância: ${instanceId}`);
 
   try {
+    const execPath = process.env.PUPPETEER_EXECUTABLE_PATH || 'auto-detect';
     console.log('[WPP] Criando cliente WPPConnect com configuração simplificada...');
+    console.log(`[WPP] Puppeteer executablePath: ${execPath}`);
+    console.log(`[WPP] PUPPETEER_CACHE_DIR: ${process.env.PUPPETEER_CACHE_DIR || 'not set'}`);
     
     const client = await wppconnect.create({
       session: instanceId,
@@ -45,9 +48,11 @@ export async function startWhatsAppSession(instanceId, onQRCode, onStatusChange,
         }
       },
 
-      // Configurações do Puppeteer - SIMPLIFICADAS
+      // Configurações do Puppeteer
       puppeteerOptions: {
         headless: true,
+        // Usa variável de ambiente ou deixa Puppeteer decidir
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -56,7 +61,7 @@ export async function startWhatsAppSession(instanceId, onQRCode, onStatusChange,
           '--no-first-run',
           '--no-zygote',
           '--disable-gpu',
-          '--single-process', // Importante para ambientes com pouca memória
+          '--single-process', // Importante para Render (pouca memória)
         ],
       },
 
