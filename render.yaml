@@ -5,4 +5,4 @@ services:
     dockerfilePath: ./Dockerfile
     envVars:
       - key: PUPPETEER_CACHE_DIR
-        value: /app/.cache/puppeteer
+        value: /app/.puppeteer-cache
