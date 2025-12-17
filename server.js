@@ -159,8 +159,22 @@ app.get('/api/instances', async (req, res) => {
 // 🔹 Rota de callback (recebe o retorno do GHL)
 app.get('/leadconnectorhq/oauth/callback', async (req, res) => {
   try {
+    console.log('[OAUTH CALLBACK] Iniciando callback OAuth');
+    console.log('[OAUTH CALLBACK] Query params:', req.query);
+    
     const { code, state } = req.query;
-    if (!code) return res.status(400).json({ error: 'Código ausente' });
+    if (!code) {
+      console.error('[OAUTH CALLBACK] Código ausente!');
+      return res.status(400).json({ error: 'Código ausente' });
+    }
+    
+    if (!state) {
+      console.error('[OAUTH CALLBACK] State (instanceId) ausente!');
+      return res.status(400).json({ error: 'State ausente' });
+    }
+    
+    console.log('[OAUTH CALLBACK] Code:', code.substring(0, 10) + '...');
+    console.log('[OAUTH CALLBACK] State (instanceId):', state);
 
     const response = await fetch('https://services.leadconnectorhq.com/oauth/token', {
       method: 'POST',
@@ -175,6 +189,10 @@ app.get('/leadconnectorhq/oauth/callback', async (req, res) => {
     });
 
     const tokenData = await response.json();
+    console.log('[OAUTH CALLBACK] Token obtido com sucesso');
+    console.log('[OAUTH CALLBACK] TokenData keys:', Object.keys(tokenData));
+    console.log('[OAUTH CALLBACK] CompanyId:', tokenData.companyId);
+    console.log('[OAUTH CALLBACK] LocationId:', tokenData.locationId);
 
     // Obtém informações da location
     let locationId = tokenData.locationId;
@@ -187,18 +205,33 @@ app.get('/leadconnectorhq/oauth/callback', async (req, res) => {
       }
     }
 
-    await supabase.from('installations').update({
+    console.log('[OAUTH CALLBACK] Atualizando Supabase...');
+    console.log('[OAUTH CALLBACK] InstanceId:', state);
+    console.log('[OAUTH CALLBACK] LocationId final:', locationId);
+    
+    const { data: updateData, error: updateError } = await supabase.from('installations').update({
       access_token: tokenData.access_token,
       refresh_token: tokenData.refresh_token,
       company_id: tokenData.companyId,
       location_id: locationId, // NOVO: armazena locationId
     })
-    .eq('instance_id', state);
+    .eq('instance_id', state)
+    .select();
+    
+    if (updateError) {
+      console.error('[OAUTH CALLBACK] Erro ao atualizar Supabase:', updateError);
+      throw updateError;
+    }
+    
+    console.log('[OAUTH CALLBACK] Supabase atualizado com sucesso!');
+    console.log('[OAUTH CALLBACK] Dados atualizados:', updateData);
 
+    console.log('[OAUTH CALLBACK] Redirecionando para:', `${FRONTEND_URL}/instance/${state}`);
     res.redirect(`${FRONTEND_URL}/instance/${state}`);
   } catch (err) {
-    console.error('Erro no callback do GHL:', err);
-    res.status(500).send('Erro ao processar callback do GHL');
+    console.error('[OAUTH CALLBACK] ERRO FATAL:', err);
+    console.error('[OAUTH CALLBACK] Stack:', err.stack);
+    res.status(500).send('Erro ao processar callback do GHL: ' + err.message);
   }
 });
 
