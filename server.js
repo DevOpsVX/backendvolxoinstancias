@@ -198,8 +198,18 @@ app.get('/leadconnectorhq/oauth/callback', async (req, res) => {
     });
 
     const tokenData = await response.json();
-    console.log('[OAUTH CALLBACK] Token obtido com sucesso');
+    console.log('[OAUTH CALLBACK] Response status:', response.status);
+    console.log('[OAUTH CALLBACK] TokenData completo:', JSON.stringify(tokenData, null, 2));
     console.log('[OAUTH CALLBACK] TokenData keys:', Object.keys(tokenData));
+    
+    // Se houver erro, loga e retorna erro
+    if (tokenData.error) {
+      console.error('[OAUTH CALLBACK] ERRO DO GHL:', tokenData.error);
+      console.error('[OAUTH CALLBACK] DESCRIÇÃO:', tokenData.error_description);
+      return res.status(400).send(`Erro OAuth: ${tokenData.error} - ${tokenData.error_description}`);
+    }
+    
+    console.log('[OAUTH CALLBACK] Token obtido com sucesso');
     console.log('[OAUTH CALLBACK] CompanyId:', tokenData.companyId);
     console.log('[OAUTH CALLBACK] LocationId:', tokenData.locationId);
 
