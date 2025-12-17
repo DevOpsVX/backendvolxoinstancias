@@ -287,8 +287,131 @@ app.get('/api/instances/:id', async (req, res) => {
   }
 });
 
-// [RESTANTE DAS ROTAS EXISTENTES - MANTIDAS IGUAIS]
-// ... (todas as outras rotas do server.js original)
+// 🔹 Rota para deletar uma instância
+app.delete('/api/instances/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Fecha a sessão do WhatsApp se estiver ativa
+    if (activeSessions.has(id)) {
+      const session = activeSessions.get(id);
+      if (session.client) {
+        await closeWhatsAppSession(session.client);
+      }
+      activeSessions.delete(id);
+    }
+
+    const { error } = await supabase
+      .from('installations')
+      .delete()
+      .eq('instance_id', id);
+
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Erro ao deletar instância:', err);
+    res.status(500).json({ error: 'Erro ao deletar instância' });
+  }
+});
+
+// 🔹 Rota para atualizar nome da instância
+app.patch('/api/instances/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { instance_name } = req.body;
+    
+    if (!instance_name) {
+      return res.status(400).json({ error: 'Nome da instância é obrigatório' });
+    }
+
+    const { data, error } = await supabase
+      .from('installations')
+      .update({ instance_name })
+      .eq('instance_id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('Erro ao atualizar instância:', err);
+    res.status(500).json({ error: 'Erro ao atualizar instância' });
+  }
+});
+
+// 🔹 Rota para desconectar uma instância
+app.post('/api/instances/:id/disconnect', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    if (activeSessions.has(id)) {
+      const session = activeSessions.get(id);
+      if (session.client) {
+        await closeWhatsAppSession(session.client);
+      }
+      activeSessions.delete(id);
+    }
+
+    await supabase
+      .from('installations')
+      .update({ phone_number: null, qr_code: null, qr_code_updated_at: null })
+      .eq('instance_id', id);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Erro ao desconectar instância:', err);
+    res.status(500).json({ error: 'Erro ao desconectar instância' });
+  }
+});
+
+// 🔹 Rota para reconectar uma instância
+app.post('/api/instances/:id/reconnect', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Fecha sessão antiga se existir
+    if (activeSessions.has(id)) {
+      const session = activeSessions.get(id);
+      if (session.client) {
+        await closeWhatsAppSession(session.client);
+      }
+      activeSessions.delete(id);
+    }
+
+    // Limpa dados de conexão
+    await supabase
+      .from('installations')
+      .update({ phone_number: null, qr_code: null, qr_code_updated_at: null })
+      .eq('instance_id', id);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Erro ao reconectar instância:', err);
+    res.status(500).json({ error: 'Erro ao reconectar instância' });
+  }
+});
+
+// 🔹 Rota para obter estatísticas
+app.get('/api/stats', async (req, res) => {
+  try {
+    const { count } = await supabase
+      .from('installations')
+      .select('*', { count: 'exact', head: true });
+
+    const activeConnections = Array.from(activeSessions.values())
+      .filter(s => s.client && s.client.user)
+      .length;
+
+    res.json({
+      totalInstances: count || 0,
+      activeConnections,
+      activeSessions: activeSessions.size
+    });
+  } catch (err) {
+    console.error('Erro ao obter estatísticas:', err);
+    res.status(500).json({ error: 'Erro ao obter estatísticas' });
+  }
+});
 
 // 🔹 Função para iniciar sessão do WhatsApp com WPPConnect
 async function startWhatsAppSession(instanceId) {
