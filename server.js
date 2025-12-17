@@ -156,6 +156,15 @@ app.get('/api/instances', async (req, res) => {
   }
 });
 
+// 🔹 Rota de TESTE do callback (para verificar se está acessível)
+app.get('/leadconnectorhq/oauth/callback/test', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    message: 'Callback route is accessible',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // 🔹 Rota de callback (recebe o retorno do GHL)
 app.get('/leadconnectorhq/oauth/callback', async (req, res) => {
   try {
