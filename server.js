@@ -293,16 +293,24 @@ app.post('/ghl/outbound', async (req, res) => {
       console.error('[GHL WEBHOOK] WhatsApp não conectado para instância:', instance.instance_id);
       return res.status(400).json({ error: 'WhatsApp não conectado' });
     }
-
     // Envia mensagem via WhatsApp
     console.log('[GHL WEBHOOK] Enviando mensagem via WhatsApp para:', to);
     
     try {
+      // Workaround para erro "No LID for user": obter perfil antes de enviar
+      console.log('[GHL WEBHOOK] Obtendo perfil do número...');
+      try {
+        await session.client.getNumberProfile(to);
+      } catch (profileError) {
+        console.log('[GHL WEBHOOK] Aviso ao obter perfil:', profileError.message);
+        // Continua mesmo se falhar ao obter perfil
+      }
+      
+      // Envia mensagem
       await session.client.sendText(to, body);
       console.log('[GHL WEBHOOK] ✅ Mensagem enviada com sucesso');
     } catch (sendError) {
-      console.error('[GHL WEBHOOK] Erro ao enviar via sendText, tentando alternativa:', sendError.message);
-      // Fallback: tentar enviar diretamente via puppeteer
+      console.error('[GHL WEBHOOK] Erro ao enviar mensagem:', sendError.message);
       throw sendError;
     }
 
