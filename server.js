@@ -297,9 +297,14 @@ app.post('/ghl/outbound', async (req, res) => {
     // Envia mensagem via WhatsApp
     console.log('[GHL WEBHOOK] Enviando mensagem via WhatsApp para:', to);
     
-    // Usa sendMessage em vez de sendText para evitar erro "No LID for user"
-    const result = await session.client.sendMessage(to, body);
-    console.log('[GHL WEBHOOK] ✅ Mensagem enviada com sucesso:', result?.id);
+    try {
+      await session.client.sendText(to, body);
+      console.log('[GHL WEBHOOK] ✅ Mensagem enviada com sucesso');
+    } catch (sendError) {
+      console.error('[GHL WEBHOOK] Erro ao enviar via sendText, tentando alternativa:', sendError.message);
+      // Fallback: tentar enviar diretamente via puppeteer
+      throw sendError;
+    }
 
     // Atualiza status no GHL (se messageId fornecido)
     if (messageId && instance.access_token) {
