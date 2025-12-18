@@ -297,13 +297,17 @@ app.post('/ghl/outbound', async (req, res) => {
     console.log('[GHL WEBHOOK] Enviando mensagem via WhatsApp para:', to);
     
     try {
-      // Workaround para erro "No LID for user": obter perfil antes de enviar
-      console.log('[GHL WEBHOOK] Obtendo perfil do número...');
+      // Workaround para erro "No LID for user": verificar status do número antes de enviar
+      console.log('[GHL WEBHOOK] Verificando status do número...');
       try {
-        await session.client.getNumberProfile(to);
-      } catch (profileError) {
-        console.log('[GHL WEBHOOK] Aviso ao obter perfil:', profileError.message);
-        // Continua mesmo se falhar ao obter perfil
+        const numberStatus = await session.client.checkNumberStatus(to);
+        console.log('[GHL WEBHOOK] Status do número:', numberStatus?.status);
+        
+        // Aguarda 500ms para garantir que o LID foi registrado
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (statusError) {
+        console.log('[GHL WEBHOOK] Aviso ao verificar status:', statusError.message);
+        // Continua mesmo se falhar
       }
       
       // Envia mensagem
@@ -612,8 +616,9 @@ async function setupWhatsAppMessageListener(client, instanceId) {
         }
 
         // Converte numero do WhatsApp (5562995769957@c.us) para formato E.164 (+5562995769957)
-        const phoneNumber = message.from.replace('@c.us', '');
-        const phoneE164 = phoneNumber.startsWith('+') ? phoneNumber : '+'+phoneNumber;
+        const phoneNumber = message.from.replace('@c.us', '').replace('@g.us', '');
+        const phoneE164 = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
+        console.log('[WPP] Conversão de número:', { original: message.from, phoneNumber, phoneE164 });
         
         // Busca ou cria contato no GHL
         const contactId = await findOrCreateContactInGHL(
