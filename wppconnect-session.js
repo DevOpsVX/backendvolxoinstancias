@@ -190,6 +190,13 @@ export async function getPhoneNumber(client) {
       const wid = await client.getWid();
       console.log('[WPP] wid:', JSON.stringify(wid, null, 2));
       
+      // Se wid for uma string diretamente (ex: "556291256667@c.us")
+      if (typeof wid === 'string') {
+        const phoneNumber = wid.split('@')[0];
+        console.log(`[WPP] ✅ Número obtido via wid (string): ${phoneNumber}`);
+        return phoneNumber;
+      }
+      
       if (wid?.user) {
         const phoneNumber = wid.user;
         console.log(`[WPP] ✅ Número obtido via wid.user: ${phoneNumber}`);
