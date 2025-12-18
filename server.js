@@ -263,14 +263,16 @@ app.post('/ghl/outbound', async (req, res) => {
     console.log('[GHL WEBHOOK] Recebida mensagem outbound do GHL');
     console.log('[GHL WEBHOOK] Body:', JSON.stringify(req.body, null, 2));
 
-    const { locationId, conversationProviderId, message, messageId } = req.body;
+    const { locationId, conversationProviderId, message, messageId, phone } = req.body;
     
-    if (!message || !locationId) {
+    if (!message || !locationId || !phone) {
       console.error('[GHL WEBHOOK] Dados incompletos no webhook');
       return res.status(400).json({ error: 'Dados incompletos' });
     }
 
-    const { to, body } = message;
+    // GHL envia 'phone' e 'message' diretamente no body
+    const to = phone.replace(/\+/g, ''); // Remove '+' do número
+    const body = message;
 
     // Busca instância associada ao locationId
     const { data: instance, error } = await supabase
