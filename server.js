@@ -271,7 +271,8 @@ app.post('/ghl/outbound', async (req, res) => {
     }
 
     // GHL envia 'phone' e 'message' diretamente no body
-    const to = phone.replace(/\+/g, ''); // Remove '+' do número
+    const phoneNumber = phone.replace(/\+/g, ''); // Remove '+' do número
+    const to = `${phoneNumber}@c.us`; // Adiciona @c.us para formato WhatsApp
     const body = message;
 
     // Busca instância associada ao locationId
