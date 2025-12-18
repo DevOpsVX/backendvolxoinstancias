@@ -297,16 +297,17 @@ app.post('/ghl/outbound', async (req, res) => {
     console.log('[GHL WEBHOOK] Enviando mensagem via WhatsApp para:', to);
     
     try {
-      // Workaround para erro "No LID for user": verificar status do número antes de enviar
-      console.log('[GHL WEBHOOK] Verificando status do número...');
+      // Workaround para erro "No LID for user": abrir chat antes de enviar
+      console.log('[GHL WEBHOOK] Abrindo chat...');
       try {
-        const numberStatus = await session.client.checkNumberStatus(to);
-        console.log('[GHL WEBHOOK] Status do número:', numberStatus?.status);
+        // Abre o chat para forçar criação do LID
+        await session.client.openChat(to);
+        console.log('[GHL WEBHOOK] Chat aberto com sucesso');
         
-        // Aguarda 500ms para garantir que o LID foi registrado
-        await new Promise(resolve => setTimeout(resolve, 500));
-      } catch (statusError) {
-        console.log('[GHL WEBHOOK] Aviso ao verificar status:', statusError.message);
+        // Aguarda 1 segundo para garantir que o LID foi criado
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (openError) {
+        console.log('[GHL WEBHOOK] Aviso ao abrir chat:', openError.message);
         // Continua mesmo se falhar
       }
       
