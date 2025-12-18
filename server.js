@@ -185,16 +185,19 @@ app.get('/leadconnectorhq/oauth/callback', async (req, res) => {
     console.log('[OAUTH CALLBACK] Code:', code.substring(0, 10) + '...');
     console.log('[OAUTH CALLBACK] State (instanceId):', state);
 
+    // GHL requer application/x-www-form-urlencoded
+    const params = new URLSearchParams({
+      client_id: GHL_CLIENT_ID,
+      client_secret: GHL_CLIENT_SECRET,
+      code,
+      grant_type: 'authorization_code',
+      redirect_uri: GHL_REDIRECT_URI,
+    });
+    
     const response = await fetch('https://services.leadconnectorhq.com/oauth/token', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        client_id: GHL_CLIENT_ID,
-        client_secret: GHL_CLIENT_SECRET,
-        code,
-        grant_type: 'authorization_code',
-        redirect_uri: GHL_REDIRECT_URI,
-      }),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
     });
 
     const tokenData = await response.json();
