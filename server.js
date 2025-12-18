@@ -296,8 +296,10 @@ app.post('/ghl/outbound', async (req, res) => {
 
     // Envia mensagem via WhatsApp
     console.log('[GHL WEBHOOK] Enviando mensagem via WhatsApp para:', to);
-    await session.client.sendText(to, body);
-    console.log('[GHL WEBHOOK] ✅ Mensagem enviada com sucesso');
+    
+    // Usa sendMessage em vez de sendText para evitar erro "No LID for user"
+    const result = await session.client.sendMessage(to, body);
+    console.log('[GHL WEBHOOK] ✅ Mensagem enviada com sucesso:', result?.id);
 
     // Atualiza status no GHL (se messageId fornecido)
     if (messageId && instance.access_token) {
@@ -596,18 +598,22 @@ async function setupWhatsAppMessageListener(client, instanceId) {
           return;
         }
 
+        // Converte numero do WhatsApp (5562995769957@c.us) para formato E.164 (+5562995769957)
+        const phoneNumber = message.from.replace('@c.us', '');
+        const phoneE164 = phoneNumber.startsWith('+') ? phoneNumber : '+'+phoneNumber;
+        
         // Busca ou cria contato no GHL
         const contactId = await findOrCreateContactInGHL(
           instance.access_token,
           instance.location_id,
-          message.from,
+          phoneE164,
           message.notifyName || null
         );
 
         // Envia mensagem inbound para GHL
         const messageData = {
           type: 'SMS',
-          from: message.from,
+          from: phoneE164,
           body: message.body || '',
           contactId: contactId
         };
