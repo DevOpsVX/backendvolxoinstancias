@@ -113,6 +113,16 @@ export async function createContactInGHL(accessToken, locationId, phoneNumber, n
     const data = await response.json();
     
     if (!response.ok) {
+      // Tratamento especial para contato duplicado
+      if (data.message && data.message.includes('duplicated contacts')) {
+        console.log('[GHL] Contato duplicado detectado, usando contactId existente');
+        if (data.meta && data.meta.contactId) {
+          console.log('[GHL] ContactId do duplicado:', data.meta.contactId);
+          // Retorna objeto no mesmo formato
+          return { id: data.meta.contactId };
+        }
+      }
+      
       console.error('[GHL] Erro ao criar contato:', data);
       throw new Error(`Erro ao criar contato: ${JSON.stringify(data)}`);
     }
@@ -218,5 +228,48 @@ export async function getLocationInfo(accessToken) {
   } catch (err) {
     console.error('[GHL] Exceção ao obter location:', err);
     throw err;
+  }
+}
+
+/**
+ * Busca o Conversation Provider ID da Location (não confundir com Developer Provider ID)
+ * @param {string} accessToken - Token de acesso do GHL
+ * @returns {Promise<string|null>} - Provider ID da location ou null
+ */
+export async function getLocationConversationProviderId(accessToken) {
+  try {
+    console.log('[GHL] Buscando Conversation Provider ID da Location...');
+    
+    const response = await fetch('https://services.leadconnectorhq.com/conversations/providers', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'Version': '2021-07-28'
+      }
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      console.error('[GHL] Erro ao buscar providers:', data);
+      return null;
+    }
+    
+    console.log('[GHL] Providers encontrados:', data);
+    
+    // Procura pelo provider customizado (VolxoWPP)
+    const customProvider = data.providers?.find(p => p.isCustom === true && p.type === 'SMS');
+    
+    if (customProvider) {
+      console.log('[GHL] ✅ Location Provider ID encontrado:', customProvider.id);
+      return customProvider.id;
+    }
+    
+    console.log('[GHL] ⚠️ Nenhum provider customizado encontrado');
+    return null;
+  } catch (err) {
+    console.error('[GHL] Exceção ao buscar Location Provider ID:', err);
+    return null;
   }
 }

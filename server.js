@@ -11,7 +11,8 @@ import {
   sendInboundMessageToGHL,
   findOrCreateContactInGHL,
   updateMessageStatusInGHL,
-  getLocationInfo
+  getLocationInfo,
+  getLocationConversationProviderId
 } from './ghl-integration.js';
 
 dotenv.config();
@@ -227,6 +228,11 @@ app.get('/leadconnectorhq/oauth/callback', async (req, res) => {
       }
     }
 
+    // Busca o Location Provider ID correto
+    console.log('[OAUTH CALLBACK] Buscando Location Provider ID...');
+    const locationProviderId = await getLocationConversationProviderId(tokenData.access_token);
+    console.log('[OAUTH CALLBACK] Location Provider ID:', locationProviderId);
+    
     console.log('[OAUTH CALLBACK] Atualizando Supabase...');
     console.log('[OAUTH CALLBACK] InstanceId:', state);
     console.log('[OAUTH CALLBACK] LocationId final:', locationId);
@@ -235,7 +241,8 @@ app.get('/leadconnectorhq/oauth/callback', async (req, res) => {
       access_token: tokenData.access_token,
       refresh_token: tokenData.refresh_token,
       company_id: tokenData.companyId,
-      location_id: locationId, // NOVO: armazena locationId
+      location_id: locationId,
+      location_provider_id: locationProviderId, // NOVO: ID do provider da location
     })
     .eq('instance_id', state)
     .select();
@@ -637,9 +644,15 @@ async function setupWhatsAppMessageListener(client, instanceId) {
           contactId: contactId
         };
 
-        // Adiciona conversationProviderId se configurado
-        if (GHL_CONVERSATION_PROVIDER_ID) {
-          messageData.conversationProviderId = GHL_CONVERSATION_PROVIDER_ID;
+        // USA O LOCATION PROVIDER ID (não o Developer Provider ID)
+        if (instance.location_provider_id) {
+          messageData.conversationProviderId = instance.location_provider_id;
+          console.log('[WPP] Usando Location Provider ID:', instance.location_provider_id);
+        } else {
+          console.warn('[WPP] ⚠️ Location Provider ID não encontrado, usando fallback');
+          if (GHL_CONVERSATION_PROVIDER_ID) {
+            messageData.conversationProviderId = GHL_CONVERSATION_PROVIDER_ID;
+          }
         }
 
         await sendInboundMessageToGHL(instance.access_token, messageData);
