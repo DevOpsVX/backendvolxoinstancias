@@ -259,7 +259,7 @@ export async function getLocationConversationProviderId(accessToken) {
     console.log('[GHL] Providers encontrados:', data);
     
     // Procura pelo provider customizado (VolxoWPP)
-    const customProvider = data.providers?.find(p => p.isCustom === true && p.type === 'SMS');
+    const customProvider = data.providers?.find(p => p.isCustom === true && p.type === 'WhatsApp');
     
     if (customProvider) {
       console.log('[GHL] ✅ Location Provider ID encontrado:', customProvider.id);
