@@ -643,6 +643,18 @@ async function setupWhatsAppMessageListener(client, instanceId) {
           return;
         }
 
+        // Ignora mensagens de tipos especiais (áudio, vídeo, etc) temporariamente
+        if (message.type !== 'chat' && message.type !== 'text') {
+          console.log('[WPP] Ignorando mensagem do tipo:', message.type);
+          return;
+        }
+
+        // Valida se a mensagem tem conteúdo
+        if (!message.body || message.body.trim() === '') {
+          console.log('[WPP] Ignorando mensagem sem conteúdo');
+          return;
+        }
+
         // Busca dados da instância
         const { data: instance, error } = await supabase
           .from('installations')
@@ -661,7 +673,21 @@ async function setupWhatsAppMessageListener(client, instanceId) {
         }
 
         // Converte numero do WhatsApp (5562995769957@c.us) para formato E.164 (+5562995769957)
-        const phoneNumber = message.from.replace('@c.us', '').replace('@g.us', '');
+        const phoneNumber = message.from.replace('@c.us', '').replace('@g.us', '').replace('@lid', '');
+        
+        // Valida se é um número de telefone válido (apenas dígitos após remover sufixos)
+        const cleanPhone = phoneNumber.replace(/[^0-9]/g, '');
+        if (cleanPhone.length < 10 || cleanPhone.length > 15) {
+          console.log('[WPP] Ignorando mensagem de número inválido:', message.from);
+          return;
+        }
+        
+        // Ignora números com sufixos especiais do WhatsApp (@lid, etc)
+        if (message.from.includes('@lid') || message.from.includes('@broadcast')) {
+          console.log('[WPP] Ignorando mensagem de identificador especial:', message.from);
+          return;
+        }
+        
         const phoneE164 = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
         console.log('[WPP] Conversão de número:', { original: message.from, phoneNumber, phoneE164 });
         
