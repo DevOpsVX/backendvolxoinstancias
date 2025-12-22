@@ -638,7 +638,7 @@ async function setupWhatsAppMessageListener(client, instanceId) {
 
         // Envia mensagem inbound para GHL
         const messageData = {
-          type: 'WhatsApp',
+          type: 'SMS',
           from: phoneE164,
           body: message.body || '',
           contactId: contactId

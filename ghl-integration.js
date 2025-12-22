@@ -256,10 +256,23 @@ export async function getLocationConversationProviderId(accessToken) {
       return null;
     }
     
-    console.log('[GHL] Providers encontrados:', data);
+    console.log('[GHL] Providers encontrados:', JSON.stringify(data, null, 2));
+    
+    // Log detalhado de cada provider para debug
+    if (data.providers && Array.isArray(data.providers)) {
+      data.providers.forEach((p, index) => {
+        console.log(`[GHL] Provider ${index}:`, {
+          id: p.id,
+          name: p.name,
+          type: p.type,
+          isCustom: p.isCustom,
+          enabled: p.enabled
+        });
+      });
+    }
     
     // Procura pelo provider customizado (VolxoWPP)
-    const customProvider = data.providers?.find(p => p.isCustom === true && p.type === 'WhatsApp');
+    const customProvider = data.providers?.find(p => p.isCustom === true && p.type === 'SMS');
     
     if (customProvider) {
       console.log('[GHL] ✅ Location Provider ID encontrado:', customProvider.id);
