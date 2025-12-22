@@ -372,6 +372,43 @@ app.get('/api/instances/:id', async (req, res) => {
   }
 });
 
+// 🔹 Rota de DEBUG para listar providers do GHL
+app.get('/api/instances/:id/debug-providers', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Busca dados da instância
+    const { data: instance, error } = await supabase
+      .from('installations')
+      .select('*')
+      .eq('instance_id', id)
+      .single();
+
+    if (error || !instance) {
+      return res.status(404).json({ error: 'Instância não encontrada' });
+    }
+
+    if (!instance.access_token) {
+      return res.status(400).json({ error: 'Instância sem access_token' });
+    }
+
+    // Busca providers do GHL
+    const providerId = await getLocationConversationProviderId(instance.access_token);
+    
+    res.json({
+      success: true,
+      instance_id: id,
+      location_id: instance.location_id,
+      current_location_provider_id: instance.location_provider_id,
+      found_provider_id: providerId,
+      message: 'Verifique os logs do servidor para ver todos os providers retornados pelo GHL'
+    });
+  } catch (err) {
+    console.error('[DEBUG] Erro ao buscar providers:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 🔹 Rota para deletar uma instância
 app.delete('/api/instances/:id', async (req, res) => {
   try {
