@@ -665,6 +665,9 @@ async function startWhatsAppSession(instanceId) {
   }
 }
 
+// Cache de mensagens processadas (previne duplicação)
+const processedMessages = new Map();
+
 // 🆕 NOVO: Configura listener de mensagens do WhatsApp
 async function setupWhatsAppMessageListener(client, instanceId) {
   console.log(`[WPP] Configurando listener de mensagens para ${instanceId}`);
@@ -677,8 +680,27 @@ async function setupWhatsAppMessageListener(client, instanceId) {
           from: message.from,
           to: message.to,
           body: message.body,
-          type: message.type
+          type: message.type,
+          id: message.id,
+          fromMe: message.fromMe
         });
+
+        // Ignora mensagens enviadas por nós mesmos
+        if (message.fromMe) {
+          console.log('[WPP] Ignorando mensagem própria');
+          return;
+        }
+
+        // Dedu plicação: verifica se mensagem já foi processada
+        const messageId = message.id || `${message.from}-${message.timestamp}`;
+        if (processedMessages.has(messageId)) {
+          console.log('[WPP] Mensagem já processada, ignorando duplicata');
+          return;
+        }
+        
+        // Marca como processada (expira em 5 minutos)
+        processedMessages.set(messageId, Date.now());
+        setTimeout(() => processedMessages.delete(messageId), 5 * 60 * 1000);
 
         // Ignora mensagens de grupo e status
         if (message.isGroupMsg || message.from === 'status@broadcast') {
@@ -745,8 +767,7 @@ async function setupWhatsAppMessageListener(client, instanceId) {
         // Envia mensagem inbound para GHL
         const messageData = {
           type: 'SMS',
-          from: phoneE164,
-          body: message.body || '',
+          message: message.body || '',  // Campo correto é 'message', não 'body'
           contactId: contactId
         };
 
