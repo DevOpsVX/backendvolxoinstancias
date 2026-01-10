@@ -321,6 +321,11 @@ app.post('/ghl/outbound', async (req, res) => {
       // Envia mensagem
       await session.client.sendText(to, body);
       console.log('[GHL WEBHOOK] ✅ Mensagem enviada com sucesso');
+      
+      // Registra no cache para evitar processar novamente quando o evento onMessage disparar
+      const cacheKey = `${to}-${body.substring(0, 50)}`; // Usa primeiros 50 chars
+      outboundMessagesSent.set(cacheKey, Date.now());
+      setTimeout(() => outboundMessagesSent.delete(cacheKey), 2 * 60 * 1000); // Expira em 2 min
     } catch (sendError) {
       console.error('[GHL WEBHOOK] Erro ao enviar mensagem:', sendError.message);
       throw sendError;
@@ -668,6 +673,9 @@ async function startWhatsAppSession(instanceId) {
 // Cache de mensagens processadas (previne duplicação)
 const processedMessages = new Map();
 
+// Cache de mensagens outbound enviadas via GHL (previne duplicação de mensagens próprias)
+const outboundMessagesSent = new Map();
+
 // 🆕 NOVO: Configura listener de mensagens do WhatsApp
 async function setupWhatsAppMessageListener(client, instanceId) {
   console.log(`[WPP] Configurando listener de mensagens para ${instanceId}`);
@@ -685,10 +693,19 @@ async function setupWhatsAppMessageListener(client, instanceId) {
           fromMe: message.fromMe
         });
 
-        // Ignora mensagens enviadas por nós mesmos
+        // Processa mensagens próprias (enviadas via app do WhatsApp)
+        let isOutbound = false;
         if (message.fromMe) {
-          console.log('[WPP] Ignorando mensagem própria');
-          return;
+          // Verifica se foi enviada via GHL (webhook outbound)
+          const cacheKey = `${message.to}-${(message.body || '').substring(0, 50)}`;
+          if (outboundMessagesSent.has(cacheKey)) {
+            console.log('[WPP] Mensagem própria já registrada no GHL via webhook, ignorando');
+            return;
+          }
+          
+          // Mensagem enviada via app do WhatsApp, deve ser sincronizada
+          console.log('[WPP] Mensagem própria enviada via app, sincronizando com GHL');
+          isOutbound = true;
         }
 
         // Dedu plicação: verifica se mensagem já foi processada
@@ -737,8 +754,10 @@ async function setupWhatsAppMessageListener(client, instanceId) {
           return;
         }
 
-        // Converte numero do WhatsApp (5562995769957@c.us) para formato E.164 (+5562995769957)
-        const phoneNumber = message.from.replace('@c.us', '').replace('@g.us', '').replace('@lid', '');
+        // Converte numero do WhatsApp para formato E.164
+        // Para mensagens outbound (fromMe), o número está em 'to', para inbound está em 'from'
+        const phoneField = isOutbound ? message.to : message.from;
+        const phoneNumber = phoneField.replace('@c.us', '').replace('@g.us', '').replace('@lid', '');
         
         // Valida se é um número de telefone válido (apenas dígitos após remover sufixos)
         const cleanPhone = phoneNumber.replace(/[^0-9]/g, '');
@@ -748,8 +767,8 @@ async function setupWhatsAppMessageListener(client, instanceId) {
         }
         
         // Ignora números com sufixos especiais do WhatsApp (@lid, etc)
-        if (message.from.includes('@lid') || message.from.includes('@broadcast')) {
-          console.log('[WPP] Ignorando mensagem de identificador especial:', message.from);
+        if (phoneField.includes('@lid') || phoneField.includes('@broadcast')) {
+          console.log('[WPP] Ignorando mensagem de identificador especial:', phoneField);
           return;
         }
         
@@ -764,12 +783,18 @@ async function setupWhatsAppMessageListener(client, instanceId) {
           message.notifyName || null
         );
 
-        // Envia mensagem inbound para GHL
+        // Envia mensagem para GHL
         const messageData = {
           type: 'SMS',
           message: message.body || '',  // Campo correto é 'message', não 'body'
           contactId: contactId
         };
+        
+        // Se for mensagem outbound (enviada via app do WhatsApp), adiciona direction
+        if (isOutbound) {
+          messageData.direction = 'outbound';
+          console.log('[WPP] Mensagem outbound (enviada via app do WhatsApp)');
+        }
 
         // NOTA: Para Default Providers (sem "Is this a Custom Conversation Provider" marcado),
         // o conversationProviderId NÃO deve ser enviado, conforme documentação do GHL.
