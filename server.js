@@ -278,9 +278,19 @@ app.post('/ghl/outbound', async (req, res) => {
     }
 
     // GHL envia 'phone' e 'message' diretamente no body
-    const phoneNumber = phone.replace(/\+/g, ''); // Remove '+' do número
+    // Normaliza número: remove TODOS os caracteres não numéricos
+    const phoneNumber = phone.replace(/[^0-9]/g, '');
+    
+    // Valida formato do número
+    if (phoneNumber.length < 10 || phoneNumber.length > 15) {
+      console.error('[GHL WEBHOOK] Número de telefone inválido:', { original: phone, cleaned: phoneNumber });
+      return res.status(400).json({ error: `Número de telefone inválido: ${phone}` });
+    }
+    
     const to = `${phoneNumber}@c.us`; // Adiciona @c.us para formato WhatsApp
     const body = message;
+    
+    console.log('[GHL WEBHOOK] Número normalizado:', { original: phone, normalized: to });
 
     // Busca instância associada ao locationId
     const { data: instance, error } = await supabase
@@ -306,28 +316,53 @@ app.post('/ghl/outbound', async (req, res) => {
     try {
       // Workaround para erro "No LID for user": abrir chat antes de enviar
       console.log('[GHL WEBHOOK] Abrindo chat...');
+      let chatOpened = false;
       try {
         // Abre o chat para forçar criação do LID
         await session.client.openChat(to);
-        console.log('[GHL WEBHOOK] Chat aberto com sucesso');
+        chatOpened = true;
+        console.log('[GHL WEBHOOK] ✅ Chat aberto com sucesso');
         
         // Aguarda 1 segundo para garantir que o LID foi criado
         await new Promise(resolve => setTimeout(resolve, 1000));
       } catch (openError) {
-        console.log('[GHL WEBHOOK] Aviso ao abrir chat:', openError.message);
-        // Continua mesmo se falhar
+        console.error('[GHL WEBHOOK] ⚠️ Erro ao abrir chat:', openError.message);
+        // Tenta continuar mesmo se falhar, mas loga o erro
       }
       
       // Envia mensagem
-      await session.client.sendText(to, body);
-      console.log('[GHL WEBHOOK] ✅ Mensagem enviada com sucesso');
+      console.log('[GHL WEBHOOK] Enviando texto...', { to, bodyLength: body.length });
+      const result = await session.client.sendText(to, body);
+      
+      // Valida se mensagem foi enviada com sucesso
+      if (!result || !result.id) {
+        throw new Error('Mensagem não foi enviada (sem ID de retorno)');
+      }
+      
+      console.log('[GHL WEBHOOK] ✅ Mensagem enviada com sucesso, ID:', result.id);
       
       // Registra no cache para evitar processar novamente quando o evento onMessage disparar
       const cacheKey = `${to}-${body.substring(0, 50)}`; // Usa primeiros 50 chars
       outboundMessagesSent.set(cacheKey, Date.now());
       setTimeout(() => outboundMessagesSent.delete(cacheKey), 2 * 60 * 1000); // Expira em 2 min
     } catch (sendError) {
-      console.error('[GHL WEBHOOK] Erro ao enviar mensagem:', sendError.message);
+      console.error('[GHL WEBHOOK] ❌ Erro ao enviar mensagem:', {
+        error: sendError.message,
+        stack: sendError.stack,
+        to: to,
+        bodyPreview: body.substring(0, 100)
+      });
+      
+      // Atualiza status como 'failed' no GHL se messageId fornecido
+      if (messageId && instance.access_token) {
+        try {
+          await updateMessageStatusInGHL(instance.access_token, messageId, 'failed');
+          console.log('[GHL WEBHOOK] Status atualizado para "failed" no GHL');
+        } catch (statusError) {
+          console.error('[GHL WEBHOOK] Erro ao atualizar status de falha:', statusError.message);
+        }
+      }
+      
       throw sendError;
     }
 
