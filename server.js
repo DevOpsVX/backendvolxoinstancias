@@ -750,16 +750,10 @@ async function setupWhatsAppMessageListener(client, instanceId) {
           contactId: contactId
         };
 
-        // USA O LOCATION PROVIDER ID (não o Developer Provider ID)
-        if (instance.location_provider_id) {
-          messageData.conversationProviderId = instance.location_provider_id;
-          console.log('[WPP] Usando Location Provider ID:', instance.location_provider_id);
-        } else {
-          console.warn('[WPP] ⚠️ Location Provider ID não encontrado, usando fallback');
-          if (GHL_CONVERSATION_PROVIDER_ID) {
-            messageData.conversationProviderId = GHL_CONVERSATION_PROVIDER_ID;
-          }
-        }
+        // NOTA: Para Default Providers (sem "Is this a Custom Conversation Provider" marcado),
+        // o conversationProviderId NÃO deve ser enviado, conforme documentação do GHL.
+        // O GHL automaticamente usa o provider configurado como default na location.
+        console.log('[WPP] Enviando mensagem sem conversationProviderId (Default Provider)');
 
         await sendInboundMessageToGHL(instance.access_token, messageData);
         console.log('[WPP] ✅ Mensagem enviada para GHL com sucesso');
