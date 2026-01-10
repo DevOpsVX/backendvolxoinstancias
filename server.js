@@ -372,6 +372,49 @@ app.get('/api/instances/:id', async (req, res) => {
   }
 });
 
+// 🔹 Rota para obter QR code de uma instância
+app.get('/api/instances/:id/qrcode', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const { data, error } = await supabase
+      .from('installations')
+      .select('qr_code, qr_code_updated_at, phone_number')
+      .eq('instance_id', id)
+      .single();
+    
+    if (error || !data) {
+      return res.status(404).json({ error: 'Instance not found' });
+    }
+    
+    // Se já está conectado (tem phone_number), não precisa de QR code
+    if (data.phone_number) {
+      return res.json({
+        connected: true,
+        phone_number: data.phone_number,
+        qr_code: null
+      });
+    }
+    
+    // Se não tem QR code disponível
+    if (!data.qr_code) {
+      return res.status(404).json({ 
+        error: 'QR code not available',
+        message: 'Start the instance first to generate QR code'
+      });
+    }
+    
+    res.json({
+      connected: false,
+      qr_code: data.qr_code,
+      updated_at: data.qr_code_updated_at
+    });
+  } catch (err) {
+    console.error('[QR] Erro ao buscar QR code:', err);
+    res.status(500).json({ error: 'Error fetching QR code' });
+  }
+});
+
 // 🔹 Rota de DEBUG para listar providers do GHL
 app.get('/api/instances/:id/debug-providers', async (req, res) => {
   try {
