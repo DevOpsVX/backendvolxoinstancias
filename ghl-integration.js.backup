@@ -36,25 +36,7 @@ export async function sendInboundMessageToGHL(accessToken, messageData) {
 }
 
 /**
- * Normaliza número de telefone para formato consistente
- * @param {string} phoneNumber - Número de telefone
- * @returns {string} - Número normalizado
- */
-function normalizePhoneNumber(phoneNumber) {
-  // Remove todos os caracteres não numéricos exceto +
-  let cleaned = phoneNumber.replace(/[^\d+]/g, '');
-  
-  // Se não começa com +, adiciona
-  if (!cleaned.startsWith('+')) {
-    cleaned = '+' + cleaned;
-  }
-  
-  return cleaned;
-}
-
-/**
  * Busca um contato no GHL pelo número de telefone
- * CORRIGIDO: Usa busca mais precisa e normalização consistente
  * @param {string} accessToken - Token de acesso do GHL
  * @param {string} locationId - ID da location no GHL
  * @param {string} phoneNumber - Número de telefone
@@ -64,57 +46,32 @@ export async function findContactInGHL(accessToken, locationId, phoneNumber) {
   try {
     console.log('[GHL] Buscando contato:', phoneNumber);
     
-    // Normaliza o número para garantir formato consistente
-    const normalizedPhone = normalizePhoneNumber(phoneNumber);
-    console.log('[GHL] Número normalizado:', normalizedPhone);
+    // Remove caracteres especiais do número para busca
+    const cleanPhone = phoneNumber.replace(/[^\d+]/g, '');
     
-    // Tenta buscar com o número normalizado
-    const searchVariants = [
-      normalizedPhone,                    // +5562995769957
-      normalizedPhone.substring(1),       // 5562995769957
-      normalizedPhone.replace('+', '')    // 5562995769957 (redundante mas seguro)
-    ];
-    
-    // Remove duplicatas
-    const uniqueVariants = [...new Set(searchVariants)];
-    
-    for (const variant of uniqueVariants) {
-      console.log('[GHL] Tentando buscar com variante:', variant);
-      
-      const response = await fetch(
-        `https://services.leadconnectorhq.com/contacts/?locationId=${locationId}&query=${encodeURIComponent(variant)}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Version': '2021-07-28'
-          }
+    const response = await fetch(
+      `https://services.leadconnectorhq.com/contacts/?locationId=${locationId}&query=${encodeURIComponent(cleanPhone)}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Version': '2021-07-28'
         }
-      );
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        console.error('[GHL] Erro ao buscar contato com variante', variant, ':', data);
-        continue; // Tenta próxima variante
       }
-      
-      if (data.contacts && data.contacts.length > 0) {
-        // Verifica se algum contato tem o número exato
-        for (const contact of data.contacts) {
-          const contactPhone = normalizePhoneNumber(contact.phone || '');
-          if (contactPhone === normalizedPhone) {
-            console.log('[GHL] ✅ Contato encontrado (match exato):', contact.id);
-            return contact;
-          }
-        }
-        
-        // Se não encontrou match exato mas tem contatos, retorna o primeiro
-        console.log('[GHL] ⚠️ Contato encontrado (match parcial):', data.contacts[0].id);
-        return data.contacts[0];
-      }
+    );
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      console.error('[GHL] Erro ao buscar contato:', data);
+      return null;
     }
     
-    console.log('[GHL] ❌ Contato não encontrado após todas as tentativas');
+    if (data.contacts && data.contacts.length > 0) {
+      console.log('[GHL] Contato encontrado:', data.contacts[0].id);
+      return data.contacts[0];
+    }
+    
+    console.log('[GHL] Contato não encontrado');
     return null;
   } catch (err) {
     console.error('[GHL] Exceção ao buscar contato:', err);
@@ -134,13 +91,9 @@ export async function createContactInGHL(accessToken, locationId, phoneNumber, n
   try {
     console.log('[GHL] Criando novo contato:', phoneNumber);
     
-    // Normaliza o número antes de criar
-    const normalizedPhone = normalizePhoneNumber(phoneNumber);
-    console.log('[GHL] Número normalizado para criação:', normalizedPhone);
-    
     const contactData = {
       locationId: locationId,
-      phone: normalizedPhone
+      phone: phoneNumber
     };
     
     if (name) {
@@ -162,19 +115,11 @@ export async function createContactInGHL(accessToken, locationId, phoneNumber, n
     if (!response.ok) {
       // Tratamento especial para contato duplicado
       if (data.message && data.message.includes('duplicated contacts')) {
-        console.log('[GHL] ⚠️ Contato duplicado detectado, buscando contactId existente');
+        console.log('[GHL] Contato duplicado detectado, usando contactId existente');
         if (data.meta && data.meta.contactId) {
-          console.log('[GHL] ✅ ContactId do duplicado:', data.meta.contactId);
+          console.log('[GHL] ContactId do duplicado:', data.meta.contactId);
           // Retorna objeto no mesmo formato
           return { id: data.meta.contactId };
-        }
-        
-        // Se não veio o contactId no erro, tenta buscar novamente
-        console.log('[GHL] Tentando buscar contato duplicado...');
-        const existingContact = await findContactInGHL(accessToken, locationId, normalizedPhone);
-        if (existingContact) {
-          console.log('[GHL] ✅ Contato duplicado encontrado na busca:', existingContact.id);
-          return existingContact;
         }
       }
       
@@ -182,7 +127,7 @@ export async function createContactInGHL(accessToken, locationId, phoneNumber, n
       throw new Error(`Erro ao criar contato: ${JSON.stringify(data)}`);
     }
     
-    console.log('[GHL] ✅ Contato criado com sucesso:', data.contact.id);
+    console.log('[GHL] Contato criado com sucesso:', data.contact.id);
     return data.contact;
   } catch (err) {
     console.error('[GHL] Exceção ao criar contato:', err);
@@ -192,61 +137,28 @@ export async function createContactInGHL(accessToken, locationId, phoneNumber, n
 
 /**
  * Busca ou cria um contato no GHL
- * CORRIGIDO: Implementa cache local e melhor tratamento de duplicatas
  * @param {string} accessToken - Token de acesso do GHL
  * @param {string} locationId - ID da location no GHL
  * @param {string} phoneNumber - Número de telefone
  * @param {string} name - Nome do contato (opcional)
  * @returns {Promise<string>} - ID do contato
  */
-// Cache de contatos por número (em memória)
-const contactCache = new Map();
-
 export async function findOrCreateContactInGHL(accessToken, locationId, phoneNumber, name = null) {
   try {
-    // Normaliza o número para usar como chave do cache
-    const normalizedPhone = normalizePhoneNumber(phoneNumber);
-    const cacheKey = `${locationId}:${normalizedPhone}`;
-    
-    // Verifica cache
-    if (contactCache.has(cacheKey)) {
-      const cachedContactId = contactCache.get(cacheKey);
-      console.log('[GHL] ✅ Contato encontrado no cache:', cachedContactId);
-      return cachedContactId;
-    }
-    
     // Tenta buscar contato existente
-    console.log('[GHL] Buscando contato existente...');
-    const existingContact = await findContactInGHL(accessToken, locationId, normalizedPhone);
+    const existingContact = await findContactInGHL(accessToken, locationId, phoneNumber);
     
     if (existingContact) {
-      console.log('[GHL] ✅ Contato existente encontrado:', existingContact.id);
-      // Adiciona ao cache
-      contactCache.set(cacheKey, existingContact.id);
       return existingContact.id;
     }
     
     // Se não encontrou, cria novo contato
-    console.log('[GHL] Criando novo contato...');
-    const newContact = await createContactInGHL(accessToken, locationId, normalizedPhone, name);
-    
-    // Adiciona ao cache
-    contactCache.set(cacheKey, newContact.id);
-    console.log('[GHL] ✅ Novo contato criado e adicionado ao cache:', newContact.id);
-    
+    const newContact = await createContactInGHL(accessToken, locationId, phoneNumber, name);
     return newContact.id;
   } catch (err) {
     console.error('[GHL] Erro ao buscar ou criar contato:', err);
     throw err;
   }
-}
-
-/**
- * Limpa o cache de contatos (útil para testes ou reset)
- */
-export function clearContactCache() {
-  contactCache.clear();
-  console.log('[GHL] Cache de contatos limpo');
 }
 
 /**
