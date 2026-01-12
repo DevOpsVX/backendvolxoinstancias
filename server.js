@@ -911,9 +911,19 @@ async function setupWhatsAppMessageListener(client, instanceId) {
           return;
         }
         
-        // Ignora números com sufixos especiais do WhatsApp (@lid, etc)
-        if (phoneField.includes('@lid') || phoneField.includes('@broadcast')) {
-          console.log('[WPP] ⚠️ Ignorando mensagem de identificador especial:', {
+        // Ignora apenas broadcasts (mas permite @lid para mensagens próprias)
+        if (phoneField.includes('@broadcast')) {
+          console.log('[WPP] ⚠️ Ignorando mensagem de broadcast:', {
+            phoneField: phoneField,
+            from: message.from,
+            to: message.to
+          });
+          return;
+        }
+        
+        // Para @lid, só ignora se não for mensagem própria
+        if (phoneField.includes('@lid') && !isOutbound) {
+          console.log('[WPP] ⚠️ Ignorando mensagem inbound de @lid:', {
             phoneField: phoneField,
             from: message.from,
             to: message.to
