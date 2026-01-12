@@ -93,6 +93,65 @@ app.get('/api/test-supabase', async (req, res) => {
   }
 });
 
+// 🔍 Endpoint de debug para verificar status da instância
+app.get('/api/instances/:id/debug', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Busca instância no banco
+    const { data: installation, error } = await supabase
+      .from('installations')
+      .select('*')
+      .eq('instance_id', id)
+      .single();
+    
+    if (error || !installation) {
+      return res.status(404).json({
+        success: false,
+        message: 'Instância não encontrada',
+        error: error
+      });
+    }
+    
+    // Verifica se sessão está ativa
+    const session = activeSessions.get(id);
+    const isConnected = session && session.client;
+    
+    // Informações de debug
+    const debugInfo = {
+      instance_id: id,
+      location_id: installation.location_id,
+      location_provider_id: installation.location_provider_id,
+      whatsapp_connected: isConnected,
+      session_exists: !!session,
+      has_access_token: !!installation.access_token,
+      created_at: installation.created_at,
+      updated_at: installation.updated_at
+    };
+    
+    // Se conectado, tenta obter número do WhatsApp
+    if (isConnected) {
+      try {
+        const phoneNumber = await getPhoneNumber(session.client);
+        debugInfo.whatsapp_phone = phoneNumber;
+      } catch (err) {
+        debugInfo.whatsapp_phone_error = err.message;
+      }
+    }
+    
+    res.json({
+      success: true,
+      debug: debugInfo
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: 'Erro ao obter debug info',
+      error: err.message
+    });
+  }
+});
+
 // 🧭 Função que gera a URL de autenticação no GHL
 function buildGhlAuthUrl(instanceId) {
   const params = new URLSearchParams({
