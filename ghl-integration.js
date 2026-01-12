@@ -62,7 +62,10 @@ function normalizePhoneNumber(phoneNumber) {
  */
 export async function findContactInGHL(accessToken, locationId, phoneNumber) {
   try {
-    console.log('[GHL] Buscando contato:', phoneNumber);
+    console.log('[GHL] 🔍 Buscando contato:', {
+      phoneNumber: phoneNumber,
+      locationId: locationId
+    });
     
     // Normaliza o número para garantir formato consistente
     const normalizedPhone = normalizePhoneNumber(phoneNumber);
@@ -98,18 +101,37 @@ export async function findContactInGHL(accessToken, locationId, phoneNumber) {
         continue; // Tenta próxima variante
       }
       
+      console.log('[GHL] Resultado da busca com variante', variant, ':', {
+        totalContacts: data.contacts?.length || 0,
+        contacts: data.contacts?.map(c => ({ id: c.id, phone: c.phone, name: c.name }))
+      });
+      
       if (data.contacts && data.contacts.length > 0) {
         // Verifica se algum contato tem o número exato
         for (const contact of data.contacts) {
           const contactPhone = normalizePhoneNumber(contact.phone || '');
+          console.log('[GHL] Comparando:', {
+            contactPhone: contactPhone,
+            normalizedPhone: normalizedPhone,
+            match: contactPhone === normalizedPhone
+          });
+          
           if (contactPhone === normalizedPhone) {
-            console.log('[GHL] ✅ Contato encontrado (match exato):', contact.id);
+            console.log('[GHL] ✅ Contato encontrado (match exato):', {
+              id: contact.id,
+              phone: contact.phone,
+              name: contact.name
+            });
             return contact;
           }
         }
         
         // Se não encontrou match exato mas tem contatos, retorna o primeiro
-        console.log('[GHL] ⚠️ Contato encontrado (match parcial):', data.contacts[0].id);
+        console.log('[GHL] ⚠️ Contato encontrado (match parcial):', {
+          id: data.contacts[0].id,
+          phone: data.contacts[0].phone,
+          name: data.contacts[0].name
+        });
         return data.contacts[0];
       }
     }
@@ -132,11 +154,23 @@ export async function findContactInGHL(accessToken, locationId, phoneNumber) {
  */
 export async function createContactInGHL(accessToken, locationId, phoneNumber, name = null) {
   try {
-    console.log('[GHL] Criando novo contato:', phoneNumber);
+    console.log('[GHL] ➕ Criando novo contato:', {
+      phoneNumber: phoneNumber,
+      name: name,
+      locationId: locationId
+    });
     
     // Normaliza o número antes de criar
     const normalizedPhone = normalizePhoneNumber(phoneNumber);
     console.log('[GHL] Número normalizado para criação:', normalizedPhone);
+    
+    // ⚠️ VERIFICAÇÃO DUPLA: Busca novamente antes de criar para evitar duplicatas
+    console.log('[GHL] Verificando novamente antes de criar...');
+    const existingContact = await findContactInGHL(accessToken, locationId, normalizedPhone);
+    if (existingContact) {
+      console.log('[GHL] ⚠️ Contato já existe! Retornando contato existente:', existingContact.id);
+      return existingContact;
+    }
     
     const contactData = {
       locationId: locationId,

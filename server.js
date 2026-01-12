@@ -731,24 +731,25 @@ async function setupWhatsAppMessageListener(client, instanceId) {
         // ⚠️ IMPORTANTE: Verificar grupo/status ANTES de deduplicatação
         // para evitar poluir o cache com mensagens que serão ignoradas
         
-        // Ignora mensagens de grupo e status
-        if (message.isGroupMsg || message.from === 'status@broadcast') {
-          console.log('[WPP] ⚠️ Ignorando mensagem de grupo ou status:', {
+        // Ignora mensagens de grupo e status (EXCETO mensagens próprias)
+        if ((message.isGroupMsg || message.from === 'status@broadcast') && !message.fromMe) {
+          console.log('[WPP] ⚠️ Ignorando mensagem de grupo ou status (não própria):', {
             isGroupMsg: message.isGroupMsg,
             from: message.from,
             to: message.to,
-            chatId: message.chatId,
+            fromMe: message.fromMe,
             body: message.body?.substring(0, 50)
           });
           return;
         }
         
-        // Verifica se é chat individual (termina com @c.us)
-        if (!message.from.endsWith('@c.us') && !message.to?.endsWith('@c.us')) {
-          console.log('[WPP] ⚠️ Ignorando mensagem não individual:', {
+        // Verifica se é chat individual (termina com @c.us) - EXCETO mensagens próprias
+        if (!message.fromMe && !message.from.endsWith('@c.us') && !message.to?.endsWith('@c.us')) {
+          console.log('[WPP] ⚠️ Ignorando mensagem não individual (não própria):', {
             from: message.from,
             to: message.to,
-            type: message.type
+            type: message.type,
+            fromMe: message.fromMe
           });
           return;
         }
@@ -782,22 +783,37 @@ async function setupWhatsAppMessageListener(client, instanceId) {
         processedMessages.set(messageId, Date.now());
         setTimeout(() => processedMessages.delete(messageId), 2 * 60 * 1000);
 
-        // Ignora mensagens de tipos especiais (áudio, vídeo, etc) temporariamente
-        if (message.type !== 'chat' && message.type !== 'text') {
-          console.log('[WPP] ⚠️ Ignorando mensagem do tipo:', {
-            type: message.type,
-            from: message.from,
-            hasBody: !!message.body
-          });
-          return;
+        // Log do tipo de mensagem para monitoramento
+        console.log('[WPP] Tipo de mensagem:', {
+          type: message.type,
+          hasBody: !!message.body,
+          hasMediaKey: !!message.mediaKey,
+          mimetype: message.mimetype
+        });
+        
+        // Prepara conteúdo da mensagem baseado no tipo
+        let messageContent = message.body || '';
+        
+        // Para mensagens de mídia, adiciona indicação do tipo
+        if (message.type === 'image') {
+          messageContent = message.body ? `🖼️ Imagem: ${message.body}` : '🖼️ Imagem';
+        } else if (message.type === 'ptt' || message.type === 'audio') {
+          messageContent = '🎤 Áudio';
+        } else if (message.type === 'video') {
+          messageContent = '🎥 Vídeo';
+        } else if (message.type === 'document') {
+          messageContent = message.body ? `📄 Documento: ${message.body}` : '📄 Documento';
+        } else if (message.type === 'sticker') {
+          messageContent = '👍 Figurinha';
         }
 
-        // Valida se a mensagem tem conteúdo
-        if (!message.body || message.body.trim() === '') {
+        // Valida se a mensagem tem conteúdo (texto ou mídia)
+        if (!messageContent || messageContent.trim() === '') {
           console.log('[WPP] ⚠️ Ignorando mensagem sem conteúdo:', {
             from: message.from,
             type: message.type,
-            bodyLength: message.body?.length || 0
+            bodyLength: message.body?.length || 0,
+            hasMediaKey: !!message.mediaKey
           });
           return;
         }
@@ -860,7 +876,7 @@ async function setupWhatsAppMessageListener(client, instanceId) {
         // Envia mensagem para GHL
         const messageData = {
           type: 'SMS',
-          message: message.body || '',  // Campo correto é 'message', não 'body'
+          message: messageContent,  // Usa messageContent que já inclui indicação de mídia
           contactId: contactId
         };
         
