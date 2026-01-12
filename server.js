@@ -728,6 +728,31 @@ async function setupWhatsAppMessageListener(client, instanceId) {
           fromMe: message.fromMe
         });
 
+        // ⚠️ IMPORTANTE: Verificar grupo/status ANTES de deduplicatação
+        // para evitar poluir o cache com mensagens que serão ignoradas
+        
+        // Ignora mensagens de grupo e status
+        if (message.isGroupMsg || message.from === 'status@broadcast') {
+          console.log('[WPP] ⚠️ Ignorando mensagem de grupo ou status:', {
+            isGroupMsg: message.isGroupMsg,
+            from: message.from,
+            to: message.to,
+            chatId: message.chatId,
+            body: message.body?.substring(0, 50)
+          });
+          return;
+        }
+        
+        // Verifica se é chat individual (termina com @c.us)
+        if (!message.from.endsWith('@c.us') && !message.to?.endsWith('@c.us')) {
+          console.log('[WPP] ⚠️ Ignorando mensagem não individual:', {
+            from: message.from,
+            to: message.to,
+            type: message.type
+          });
+          return;
+        }
+
         // Processa mensagens próprias (enviadas via app do WhatsApp)
         let isOutbound = false;
         if (message.fromMe) {
@@ -743,32 +768,37 @@ async function setupWhatsAppMessageListener(client, instanceId) {
           isOutbound = true;
         }
 
-        // Dedu plicação: verifica se mensagem já foi processada
-        const messageId = message.id || `${message.from}-${message.timestamp}`;
+        // Deduplicatação: verifica se mensagem já foi processada
+        const messageId = message.id || `${message.from}-${message.to}-${message.timestamp}`;
         if (processedMessages.has(messageId)) {
-          console.log('[WPP] Mensagem já processada, ignorando duplicata');
+          console.log('[WPP] ⚠️ Mensagem já processada, ignorando duplicata:', {
+            messageId: messageId,
+            body: message.body?.substring(0, 50)
+          });
           return;
         }
         
-        // Marca como processada (expira em 5 minutos)
+        // Marca como processada (expira em 2 minutos)
         processedMessages.set(messageId, Date.now());
-        setTimeout(() => processedMessages.delete(messageId), 5 * 60 * 1000);
-
-        // Ignora mensagens de grupo e status
-        if (message.isGroupMsg || message.from === 'status@broadcast') {
-          console.log('[WPP] Ignorando mensagem de grupo ou status');
-          return;
-        }
+        setTimeout(() => processedMessages.delete(messageId), 2 * 60 * 1000);
 
         // Ignora mensagens de tipos especiais (áudio, vídeo, etc) temporariamente
         if (message.type !== 'chat' && message.type !== 'text') {
-          console.log('[WPP] Ignorando mensagem do tipo:', message.type);
+          console.log('[WPP] ⚠️ Ignorando mensagem do tipo:', {
+            type: message.type,
+            from: message.from,
+            hasBody: !!message.body
+          });
           return;
         }
 
         // Valida se a mensagem tem conteúdo
         if (!message.body || message.body.trim() === '') {
-          console.log('[WPP] Ignorando mensagem sem conteúdo');
+          console.log('[WPP] ⚠️ Ignorando mensagem sem conteúdo:', {
+            from: message.from,
+            type: message.type,
+            bodyLength: message.body?.length || 0
+          });
           return;
         }
 
@@ -797,13 +827,22 @@ async function setupWhatsAppMessageListener(client, instanceId) {
         // Valida se é um número de telefone válido (apenas dígitos após remover sufixos)
         const cleanPhone = phoneNumber.replace(/[^0-9]/g, '');
         if (cleanPhone.length < 10 || cleanPhone.length > 15) {
-          console.log('[WPP] Ignorando mensagem de número inválido:', message.from);
+          console.log('[WPP] ⚠️ Ignorando mensagem de número inválido:', {
+            original: message.from,
+            phoneNumber: phoneNumber,
+            cleanPhone: cleanPhone,
+            length: cleanPhone.length
+          });
           return;
         }
         
         // Ignora números com sufixos especiais do WhatsApp (@lid, etc)
         if (phoneField.includes('@lid') || phoneField.includes('@broadcast')) {
-          console.log('[WPP] Ignorando mensagem de identificador especial:', phoneField);
+          console.log('[WPP] ⚠️ Ignorando mensagem de identificador especial:', {
+            phoneField: phoneField,
+            from: message.from,
+            to: message.to
+          });
           return;
         }
         
