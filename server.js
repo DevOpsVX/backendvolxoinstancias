@@ -126,7 +126,8 @@ app.get('/api/instances/:id/debug', async (req, res) => {
       session_exists: !!session,
       has_access_token: !!installation.access_token,
       created_at: installation.created_at,
-      updated_at: installation.updated_at
+      updated_at: installation.updated_at,
+      recent_logs: debugLogs.slice(-20) // Últimos 20 logs
     };
     
     // Se conectado, tenta obter número do WhatsApp
@@ -770,6 +771,26 @@ const processedMessages = new Map();
 // Cache de mensagens outbound enviadas via GHL (previne duplicação de mensagens próprias)
 const outboundMessagesSent = new Map();
 
+// Sistema de captura de logs em memória para debug
+const debugLogs = [];
+const MAX_DEBUG_LOGS = 100;
+
+function debugLog(category, message, data = {}) {
+  const logEntry = {
+    timestamp: new Date().toISOString(),
+    category,
+    message,
+    data
+  };
+  
+  debugLogs.push(logEntry);
+  if (debugLogs.length > MAX_DEBUG_LOGS) {
+    debugLogs.shift();
+  }
+  
+  console.log(`[${category}] ${message}`, data);
+}
+
 // 🆕 NOVO: Configura listener de mensagens do WhatsApp
 async function setupWhatsAppMessageListener(client, instanceId) {
   console.log(`[WPP] Configurando listener de mensagens para ${instanceId}`);
@@ -778,13 +799,14 @@ async function setupWhatsAppMessageListener(client, instanceId) {
     // Listener para mensagens recebidas
     client.onMessage(async (message) => {
       try {
-        console.log(`[WPP] 📨 Mensagem recebida:`, {
+        debugLog('WPP-MSG', '📨 Mensagem recebida', {
           from: message.from,
           to: message.to,
-          body: message.body,
+          body: message.body?.substring(0, 100),
           type: message.type,
           id: message.id,
-          fromMe: message.fromMe
+          fromMe: message.fromMe,
+          isGroupMsg: message.isGroupMsg
         });
 
         // ⚠️ IMPORTANTE: Verificar grupo/status ANTES de deduplicatação
@@ -792,23 +814,23 @@ async function setupWhatsAppMessageListener(client, instanceId) {
         
         // Ignora mensagens de grupo e status (EXCETO mensagens próprias)
         if ((message.isGroupMsg || message.from === 'status@broadcast') && !message.fromMe) {
-          console.log('[WPP] ⚠️ Ignorando mensagem de grupo ou status (não própria):', {
+          debugLog('WPP-FILTER', '⚠️ BLOQUEADO: Grupo/Status', {
             isGroupMsg: message.isGroupMsg,
             from: message.from,
             to: message.to,
-            fromMe: message.fromMe,
-            body: message.body?.substring(0, 50)
+            fromMe: message.fromMe
           });
           return;
         }
         
         // Verifica se é chat individual (termina com @c.us) - EXCETO mensagens próprias
         if (!message.fromMe && !message.from.endsWith('@c.us') && !message.to?.endsWith('@c.us')) {
-          console.log('[WPP] ⚠️ Ignorando mensagem não individual (não própria):', {
+          debugLog('WPP-FILTER', '⚠️ BLOQUEADO: Não individual', {
             from: message.from,
             to: message.to,
-            type: message.type,
-            fromMe: message.fromMe
+            fromMe: message.fromMe,
+            fromEndsWithCUS: message.from.endsWith('@c.us'),
+            toEndsWithCUS: message.to?.endsWith('@c.us')
           });
           return;
         }
@@ -819,22 +841,22 @@ async function setupWhatsAppMessageListener(client, instanceId) {
           // Verifica se foi enviada via GHL (webhook outbound)
           const cacheKey = `${message.to}-${(message.body || '').substring(0, 50)}`;
           if (outboundMessagesSent.has(cacheKey)) {
-            console.log('[WPP] Mensagem própria já registrada no GHL via webhook, ignorando');
+            debugLog('WPP-FILTER', '⚠️ BLOQUEADO: Já enviada via GHL', { cacheKey });
             return;
           }
           
           // Mensagem enviada via app do WhatsApp, deve ser sincronizada
-          console.log('[WPP] Mensagem própria enviada via app, sincronizando com GHL');
+          debugLog('WPP-OUTBOUND', '✅ Mensagem própria via app - SINCRONIZANDO', {
+            to: message.to,
+            body: message.body?.substring(0, 50)
+          });
           isOutbound = true;
         }
 
-        // Deduplicatação: verifica se mensagem já foi processada
+        // Deduplicação: verifica se mensagem já foi processada
         const messageId = message.id || `${message.from}-${message.to}-${message.timestamp}`;
         if (processedMessages.has(messageId)) {
-          console.log('[WPP] ⚠️ Mensagem já processada, ignorando duplicata:', {
-            messageId: messageId,
-            body: message.body?.substring(0, 50)
-          });
+          debugLog('WPP-FILTER', '⚠️ BLOQUEADO: Duplicata', { messageId });
           return;
         }
         
@@ -868,11 +890,9 @@ async function setupWhatsAppMessageListener(client, instanceId) {
 
         // Valida se a mensagem tem conteúdo (texto ou mídia)
         if (!messageContent || messageContent.trim() === '') {
-          console.log('[WPP] ⚠️ Ignorando mensagem sem conteúdo:', {
-            from: message.from,
+          debugLog('WPP-FILTER', '⚠️ BLOQUEADO: Sem conteúdo', {
             type: message.type,
-            bodyLength: message.body?.length || 0,
-            hasMediaKey: !!message.mediaKey
+            bodyLength: message.body?.length || 0
           });
           return;
         }
@@ -902,66 +922,68 @@ async function setupWhatsAppMessageListener(client, instanceId) {
         // Valida se é um número de telefone válido (apenas dígitos após remover sufixos)
         const cleanPhone = phoneNumber.replace(/[^0-9]/g, '');
         if (cleanPhone.length < 10 || cleanPhone.length > 15) {
-          console.log('[WPP] ⚠️ Ignorando mensagem de número inválido:', {
-            original: message.from,
-            phoneNumber: phoneNumber,
-            cleanPhone: cleanPhone,
-            length: cleanPhone.length
+          debugLog('WPP-FILTER', '⚠️ BLOQUEADO: Número inválido', {
+            phoneField,
+            phoneNumber,
+            cleanPhone,
+            length: cleanPhone.length,
+            isOutbound
           });
           return;
         }
         
         // Ignora apenas broadcasts (mas permite @lid para mensagens próprias)
         if (phoneField.includes('@broadcast')) {
-          console.log('[WPP] ⚠️ Ignorando mensagem de broadcast:', {
-            phoneField: phoneField,
-            from: message.from,
-            to: message.to
-          });
+          debugLog('WPP-FILTER', '⚠️ BLOQUEADO: Broadcast', { phoneField });
           return;
         }
         
         // Para @lid, só ignora se não for mensagem própria
         if (phoneField.includes('@lid') && !isOutbound) {
-          console.log('[WPP] ⚠️ Ignorando mensagem inbound de @lid:', {
-            phoneField: phoneField,
-            from: message.from,
-            to: message.to
+          debugLog('WPP-FILTER', '⚠️ BLOQUEADO: @lid inbound', {
+            phoneField,
+            isOutbound
           });
           return;
         }
         
+        // Se chegou aqui com @lid E isOutbound, deve processar!
+        if (phoneField.includes('@lid') && isOutbound) {
+          debugLog('WPP-OUTBOUND', '✅ @lid PERMITIDO (mensagem própria)', {
+            phoneField,
+            isOutbound
+          });
+        }
+        
         const phoneE164 = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
-        console.log('[WPP] Conversão de número:', { original: message.from, phoneNumber, phoneE164 });
+        debugLog('WPP-PROCESS', 'Convertendo número', { phoneField, phoneNumber, phoneE164, isOutbound });
         
         // Busca ou cria contato no GHL
+        debugLog('WPP-PROCESS', 'Buscando/criando contato no GHL', { phoneE164 });
         const contactId = await findOrCreateContactInGHL(
           instance.access_token,
           instance.location_id,
           phoneE164,
           message.notifyName || null
         );
+        debugLog('WPP-PROCESS', 'Contato encontrado/criado', { contactId });
 
         // Envia mensagem para GHL
         const messageData = {
           type: 'SMS',
-          message: messageContent,  // Usa messageContent que já inclui indicação de mídia
+          message: messageContent,
           contactId: contactId
         };
         
         // Se for mensagem outbound (enviada via app do WhatsApp), adiciona direction
         if (isOutbound) {
           messageData.direction = 'outbound';
-          console.log('[WPP] Mensagem outbound (enviada via app do WhatsApp)');
+          debugLog('WPP-OUTBOUND', '🚀 Enviando como OUTBOUND para GHL', { messageData });
         }
 
-        // NOTA: Para Default Providers (sem "Is this a Custom Conversation Provider" marcado),
-        // o conversationProviderId NÃO deve ser enviado, conforme documentação do GHL.
-        // O GHL automaticamente usa o provider configurado como default na location.
-        console.log('[WPP] Enviando mensagem sem conversationProviderId (Default Provider)');
-
+        debugLog('WPP-SEND', 'Enviando para GHL (Default Provider)', { messageData });
         await sendInboundMessageToGHL(instance.access_token, messageData);
-        console.log('[WPP] ✅ Mensagem enviada para GHL com sucesso');
+        debugLog('WPP-SUCCESS', '✅ Mensagem enviada para GHL com sucesso', { contactId, isOutbound });
 
       } catch (err) {
         console.error('[WPP] Erro ao processar mensagem inbound:', err);
